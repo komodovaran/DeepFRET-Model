@@ -1,24 +1,16 @@
 import sys
-import matplotlib.pyplot as plt
-import keras
-import tensorflow
-import sklearn.model_selection
-from keras.layers import *
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import sklearn.model_selection
+from tensorflow import keras
+from tensorflow.keras.layers import *
+from tensorflow.python.keras.layers import CuDNNLSTM
 
 GOOGLE_COLAB = "google.colab" in sys.modules
 if GOOGLE_COLAB:
     sys.path.append("./gdrive/My Drive/Colab Notebooks/DeepFRET-Model")
     plt.style.use("default")
-    config = tensorflow.ConfigProto(device_count={"GPU": 1})
-    keras.backend.set_session(tensorflow.Session(config=config))
-else:
-    config = tensorflow.ConfigProto(
-        intra_op_parallelism_threads=8, inter_op_parallelism_threads=8
-    )
-    keras.backend.tensorflow_backend.set_session(
-        tensorflow.Session(config=config)
-    )
 
 import lib.plotting
 import lib.ml
@@ -132,7 +124,7 @@ def create_model(google_colab, n_features):
     acc = "accuracy"
 
     outputs = Dense(6, activation=activation)(final)
-    optimizer = keras.optimizers.sgd(lr=0.1, momentum=0.8, nesterov=True)
+    optimizer = keras.optimizers.SGD(lr=0.1, momentum=0.8, nesterov=True)
     model = keras.models.Model(inputs=inputs, outputs=outputs)
     model.compile(loss=loss, optimizer=optimizer, metrics=[acc])
     return model
@@ -246,9 +238,9 @@ def main():
 
 
 if __name__ == "__main__":
-    ROOTDIR = "." # In order to run this on Google Colab, everything must be placed according to "~/Google Drive/Colab Notebooks/DeepFRET/"
-    DATANAME = "sim" # Suffix of the data name, separated by underscore (no need to write X, y)
-    TAG = None # Applies name tag to model name, if any is given
+    ROOTDIR = "."  # In order to run this on Google Colab, everything must be placed according to "~/Google Drive/Colab Notebooks/DeepFRET/"
+    DATANAME = "sim"  # Suffix of the data name, separated by underscore (no need to write X, y)
+    TAG = None  # Applies name tag to model name, if any is given
 
     DATADIR = "data"
     OUTDIR = "output"
@@ -256,7 +248,7 @@ if __name__ == "__main__":
     NEW_MODEL = True
 
     EPOCHS = 1
-    PERCENT = 100 # Percentage of data to use
+    PERCENT = 100  # Percentage of data to use
     BATCH_SIZE = 128
     CALLBACK_TIMEOUT = 3
     N_TIMESTEPS = None  # Set to None for variable length traces (not supported for all data/model setups)

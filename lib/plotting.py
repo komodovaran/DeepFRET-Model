@@ -1,9 +1,11 @@
 import os
+
 import matplotlib.ticker
+import mlxtend.evaluate
 import numpy as np
 import pandas as pd
-import mlxtend.evaluate
 from matplotlib import pyplot as plt
+
 import lib.ml
 import lib.utils
 

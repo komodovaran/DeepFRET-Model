@@ -1,11 +1,12 @@
 import os.path
-import keras
+from warnings import warn
+
+from tensorflow import keras
 import numpy as np
+import scipy.signal
 import sklearn.model_selection
 import sklearn.utils
 from send2trash import send2trash
-from warnings import warn
-import scipy.signal
 
 
 def labels_to_binary(y, one_hot, to_ones):
