@@ -1,7 +1,6 @@
-import itertools
 import os
-
 import numpy as np
+import itertools
 
 
 def random_seed_mp(verbose=False):
@@ -14,8 +13,8 @@ def random_seed_mp(verbose=False):
 
 def sample_max_normalize_3d(X):
     """
-    Sample-wise max-value normalization of 3D array (tensor).
-    This is not feature-wise normalization, to keep the ratios between features intact!
+    Sample-wise max-value normalization of 3D array (tensor). This is not
+    feature-wise normalization, to keep the ratios between features intact!
     """
     if len(X.shape) == 2:
         X = X[np.newaxis, :, :]
@@ -36,7 +35,9 @@ def count_adjacent_values(arr):
     for ax in axes:
         for starts, ln in zip(adjs, lns):
             alpha = (1 - np.mean(score[starts:starts + ln])) * 0.15
-            ax.axvspan(xmin = t[starts], xmax = t[starts] + (ln - 1), alpha = alpha, color = "red", zorder = -1)
+            ax.axvspan(
+            xmin = t[starts], xmax = t[starts] + (ln - 1),
+            alpha = alpha, color = "red", zorder = -1)
     """
     arr = arr.ravel()
 

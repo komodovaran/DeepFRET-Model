@@ -1,12 +1,12 @@
 import os.path
 from warnings import warn
 
-from tensorflow import keras
 import numpy as np
 import scipy.signal
 import sklearn.model_selection
 import sklearn.utils
 from send2trash import send2trash
+from tensorflow import keras
 
 
 def labels_to_binary(y, one_hot, to_ones):
@@ -38,9 +38,7 @@ def preprocess_2d_timeseries_seq2seq(
 
 def class_to_one_hot(*y, num_classes):
     """Turns classes [1,2,3...] into one-hot encodings"""
-    y_cat = []
-    for yi in list(y):
-        y_cat.append(keras.utils.to_categorical(yi, num_classes))
+    y_cat = [keras.utils.to_categorical(yi, num_classes) for yi in list(y)]
     if len(y_cat) == 1:
         y_cat = np.squeeze(y_cat)
     return y_cat
@@ -137,14 +135,13 @@ def generate_callbacks(
         cooldown=1,
         min_lr=0,
     )
-    callbacks = [
-        log,
-        early_stopping,
-        model_checkpoint,
-        weight_checkpoint,
-        reduce_lr,
-    ]
-    return callbacks
+    return [
+            log,
+            early_stopping,
+            model_checkpoint,
+            weight_checkpoint,
+            reduce_lr,
+        ]
 
 
 def seq_probabilities(yi, skip_threshold=0.5, skip_column=0):

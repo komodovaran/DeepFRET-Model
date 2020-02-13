@@ -1,11 +1,9 @@
 import os
-
 import matplotlib.ticker
-import mlxtend.evaluate
 import numpy as np
 import pandas as pd
+import mlxtend.evaluate
 from matplotlib import pyplot as plt
-
 import lib.ml
 import lib.utils
 
@@ -196,24 +194,17 @@ def plot_predictions(
     axes = axes.ravel()
 
     clrs = ("darkgrey", "salmon", "seagreen", "darkorange", "royalblue", "cyan")
-    # LABELS = {"bleached": 0, "aggregate": 1, "dynamic": 2, "static": 3, "noisy": 4, "photophysics": 5}
     for i, ax in enumerate(axes):
         xi_val = X[i, :, :]
         yi_prd = y_pred[i, :, :]
 
         ax.plot(xi_val[:, 0], color="darkgreen", alpha=0.30)
         ax.plot(xi_val[:, 1], color="darkred", alpha=0.30)
-        # ax.plot(xi_val[:, 2], color="black", alpha=0.30)
-
         # Plot y_pred as lines
         for j, c in zip(range(len(clrs)), clrs):
             ax.plot(yi_prd[:, j], color=c, lw=2)
 
-        # Plot y_val as shaded background. If none given, use argmax of y_pred
-        if y_val is not None:
-            yi_val = y_val[i, :, :]
-        else:
-            yi_val = y_pred[i, :, :]
+        yi_val = y_val[i, :, :] if y_val is not None else y_pred[i, :, :]
         plot_category(yi_val, colors=clrs, alpha=0.30, ax=ax)
 
         ax.set_xticks(())
@@ -242,11 +233,7 @@ def plot_confusion_matrices(
     Plots multiclass and binary confusion matrices for smFRET classification
     *Very* hard-coded section, so make sure 0, 1, 2,.. labels match the strings!
     """
-    if len(y_target.shape) == 3:
-        axis = 2
-    else:
-        axis = 1
-
+    axis = 2 if len(y_target.shape) == 3 else 1
     mkwargs = dict(show_normed=True, show_absolute=show_abs, colorbar=False)
 
     if y_is_binary:
@@ -255,10 +242,11 @@ def plot_confusion_matrices(
             y_predicted=y_pred.argmax(axis=axis).ravel(),
         )
         fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
-        if ticks_binary is not None:
-            l = ticks_binary
-        else:
-            l = ["", "non-usable", "usable"]
+        l = (
+            ticks_binary
+            if ticks_binary is not None
+            else ["", "non-usable", "usable"]
+        )
         ax.set_yticklabels(l)
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
@@ -305,11 +293,11 @@ def plot_confusion_matrices(
             matrix = mlxtend.evaluate.confusion_matrix(
                 y_target=y_target_b, y_predicted=y_pred_b
             )
-            if ticks_binary is not None:
-                l = ticks_binary
-            else:
-                l = ["", "non-usable", "usable"]
-
+            l = (
+                ticks_binary
+                if ticks_binary is not None
+                else ["", "non-usable", "usable"]
+            )
             fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
             ax.set_yticklabels(l)
             ax.set_xticklabels(l, rotation=90)
@@ -336,11 +324,7 @@ def plot_category(y, ax, colors=None, alpha=0.2):
     if colors is None:
         colors = ("darkgrey", "red", "green", "orange", "royalblue", "purple")
 
-    if len(y.shape) != 1:
-        y_ = y.argmax(axis=1)  # one-hot to single
-    else:
-        y_ = y
-
+    y_ = y.argmax(axis=1) if len(y.shape) != 1 else y
     if len(colors) < len(set(y_)):
         raise ValueError("Must have at least a color for each class")
 

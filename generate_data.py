@@ -28,7 +28,6 @@ def generate_data(n_traces, n_timesteps=200):
         acceptable_noise=0.25,
         scramble_prob=0.20,
         add_gamma_noise=True,
-        verbose=True,
         discard_unbleached=False,
     )
 
