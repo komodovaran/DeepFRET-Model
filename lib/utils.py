@@ -1,6 +1,7 @@
-import os
-import numpy as np
 import itertools
+import os
+
+import numpy as np
 
 
 def random_seed_mp(verbose=False):
