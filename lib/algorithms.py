@@ -14,7 +14,7 @@ def generate_traces(
     D_lifetime=400,
     A_lifetime=200,
     blink_prob=0.05,
-    bleedthrough=0,
+    bleed_through=0,
     aa_mismatch=(-0.3, 0.3),
     trace_length=200,
     trans_prob=0.1,
@@ -23,10 +23,8 @@ def generate_traces(
     au_scaling_factor=1,
     aggregation_prob=0.1,
     max_aggregate_size=100,
-    label_traces=True,
     null_fret_value=-1,
-    verbose=False,
-    acceptable_noise=0.315,
+    acceptable_noise=0.25,
     scramble_prob=0.3,
     add_gamma_noise=True,
     merge_labels=False,
@@ -36,59 +34,68 @@ def generate_traces(
     Parameters
     ----------
     n_traces:
-        Total number of traces to generate
-    random_k_states_max:
-        Highest number of states observed in a trace
-    D_lifetime:
-        Average bleaching time (in frames) for acceptor, if assumed to be single exponential
-    trace_length:
-        Total observation time
-    trans_prob
-        Dynamic range of possible observable transition probabilities, if no manually defined transition matrix is given. Note that this is only an apparent value.
-        In reality the value will diminish slightly, due to normalization of the transition probability matrix, so that all values add up to 1.
-        If a range is input, each trace will have randomly assigned transition probabilities from within this range.
-    noise:
-        Baseline instrumental noise
-    noise_acceptable_max:
-        Upper limit for acceptable noise. If a trace is above, it gets labelled as junk
-    bleedthrough:
-        Donor signal bleeding into the acceptor channel (not FRET) (single value or range)
-    aa_mismatch:
-        Acceptor intensity mismatch in percent (single value or range)
+        Number of traces to generate
     state_means:
-        Mean FRET values to simulate. If set to random, every trace will be completely independently and randomly generated
+        Mean FRET value. Add multiple values for multiple states
+    random_k_states_max:
+        If state_means = "random", randomly selects at most k FRET states
+    min_state_diff:
+        If state_means = "random", randomly spaces states with a minimum
+        distance
+    D_lifetime:
+        Lifetime of donor fluorophore, as drawn from exponential distribution.
+        Set to None if fluorophore shouldn't bleach.
     A_lifetime:
-        Stability of donor, as multiples of acceptor average bleaching time
+        Lifetime of acceptor fluorophore, as drawn from exponential
+        distribution. Set to None if fluorophore shouldn't bleach.
+    blink_prob:
+        Probability of observing photoblinking in a trace.
+    bleed_through:
+        Donor bleed-through into acceptor channel, as a fraction of the signal.
+    aa_mismatch:
+        Acceptor-only intensity mis-correspondence, as compared to DD+DA signal.
+        Set as a value or range. A value e.g. 0.1 corresponds to 110% of the
+        DD+DA signal. A range (-0.3, 0.3) corresponds to 70% to 130% of DD+DA
+        signal.
+    trace_length:
+        Simulated recording length of traces. All traces will adhere to this
+        length.
+    trans_prob:
+        Probability of transitioning from one state to another, given the
+        transition probability matrix. This can also be overruled by a supplied
+        transition matrix (see trans_mat parameter).
+    noise:
+        Noise added to a trace, as generated from a Normal(0, sigma)
+        distribution. Sigma can be either a value or range.
     trans_mat:
-        Transition matrix to describe kinetics, from which to sample FRET values from
-    pickle_title:
-        Title of pickle to export
+        Transition matrix to be provided instead of the quick trans_prob
+        parameter.
     au_scaling_factor:
-        Multiplier to go from normalized to simulated real-life values (e.g. x20,000). If range is given, each trace will have randomly
-        assigned multiplier values (applied to all signals)
-    export_pickle:
-        Whether to export a pickle of the traces
+        Arbitrary unit scaling factor after trace generation. Can be value or
+        range.
     aggregation_prob:
-        Probability of generating bad traces, that can have random multiples of fluorophore pairs (aggregation of FRET pair samples),
-        as drawn from a Poisson distribution
+        Probability of trace being an aggregate. Note that this locks the
+        labelled molecule in a random, fixed FRET state.
     max_aggregate_size:
-        The rate lambda for the Poisson distribution
-    label_traces:
-        Labels trace by trace_quality_score (0 is bleached, 1 is bad, 2 is medium, 3 is good)
+        Maximum number of labelled molecules in an aggregate.
     null_fret_value:
-        Value for unusuable FRET values. By definition 0, but can be set to e.g. -1 to distinguish from almost-zero when training models
+        Whether to set a specific value for the no-longer-viable *ground truth*
+        FRET, e.g. -1, to easily locate it for downstream processing.
+    acceptable_noise:
+        Maximum acceptable noise level before trace is labelled as "noisy". If
+        acceptable_noise is above the upper range of noise, no "noisy" traces
+        will be generated.
+    scramble_prob:
+        Probability that the trace will end up being scrambled. This stacks with
+        aggregation.
     add_gamma_noise:
-        Adds an extra layer on top of the added gaussian noise (in an attempt to make traces appear less synthetic for ML)
+        Multiply centered Gamma(1, 0.11) to each frame's noise, to make the data
+        appear less synthetic
     merge_labels:
-        Merges other labels into having only good/bad/bleached labels
+        Merges (dynamic, static) and (aggregate, noisy, scrambled) to deal with
+        binary labels only
     discard_unbleached:
-        Discard trace if final frame isn't bleached
-    Verbose:
-        Prints progress bar
-
-    Returns
-    -------
-    A dataframe with all traces, each given a unique ID ["name"]
+        Whether to discard traces that don't fully bleach to background.
     """
 
     def _E(DD, DA):
@@ -133,8 +140,9 @@ def generate_traces(
                 # Pick the same amount of k states as state means given
                 k_states = np.size(state_means)
             else:
-                # Pick no more than k_states_max from the state means
-                # (e.g. given [0.1, 0.2, 0.3, 0.4, 0.5] use only random_k_states_max of these)
+                # Pick no more than k_states_max from the state means (e.g.
+                # given [0.1, 0.2, 0.3, 0.4, 0.5] use only
+                # random_k_states_max of these)
                 k_states = rand_k_states
                 state_means = np.random.choice(
                     state_means, size=k_states, replace=False
@@ -156,6 +164,11 @@ def generate_traces(
             trans_mat.fill(trans_prob)
             np.fill_diagonal(trans_mat, 1 - trans_prob)
 
+            # Make sure that each row/column sums to exactly 1
+            if trans_prob != 0:
+                remaining_prob = 1 - trans_mat.sum(axis=0)
+                trans_mat[trans_mat == 0] += remaining_prob
+
         # Generate HMM model
         model = pg.HiddenMarkovModel.from_matrix(
             trans_mat, distributions=dists, starts=starts
@@ -170,7 +183,7 @@ def generate_traces(
         nonlocal LABELS
         nonlocal scramble_prob
 
-        trans_prob, au_scaling_factor, noise, bleedthrough, aa_mismatch, i = [
+        trans_prob, au_scaling_factor, noise, bleed_through, aa_mismatch, i = [
             np.array(arg) for arg in args
         ]
 
@@ -234,7 +247,8 @@ def generate_traces(
             DA = _DA(DD, E_true)
             AA = _AA(E_true)
 
-            # In case AA intensity doesn't correspond exactly to donor experimentally (S will be off)
+            # In case AA intensity doesn't correspond exactly to donor
+            # experimentally (S will be off)
             AA += np.random.uniform(aa_mismatch.min(), aa_mismatch.max(), 1)
 
             # Donor bleaches first
@@ -370,7 +384,7 @@ def generate_traces(
                 label[DD == 0] = LABELS["bleached"]
                 label[AA == 0] = LABELS["bleached"]
 
-        DD_bleed = np.random.uniform(bleedthrough.min(), bleedthrough.max())
+        DD_bleed = np.random.uniform(bleed_through.min(), bleed_through.max())
         DA[DD != 0] += DD_bleed
 
         signals = DD, DA, AA
@@ -440,8 +454,6 @@ def generate_traces(
         )
         s.replace([np.inf, -np.inf], np.nan, inplace=True)
         s.fillna(method="pad", inplace=True)
-        if not label_traces:
-            s.pop("label")
         return s
 
     LABELS = {
@@ -453,14 +465,11 @@ def generate_traces(
         "scramble": 5,
     }
 
-    if verbose:
-        processes = tqdm(range(n_traces))
-    else:
-        processes = range(n_traces)
+    processes = tqdm(range(n_traces))
 
     traces = [
         _generate_trace(
-            trans_prob, au_scaling_factor, noise, bleedthrough, aa_mismatch, i
+            trans_prob, au_scaling_factor, noise, bleed_through, aa_mismatch, i
         )
         for i in processes
     ]

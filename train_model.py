@@ -47,7 +47,7 @@ def data(datadir):
 
 class ResidualConv1D:
     """
-    ***ResidualConv1D for use with best performing classifier***
+    ResidualConv1D for use with best performing classifier
     """
 
     def __init__(self, filters, kernel_size, pool=False):
@@ -132,7 +132,7 @@ def create_model(google_colab, n_features):
     acc = "accuracy"
 
     outputs = Dense(6, activation=activation)(final)
-    optimizer = keras.optimizers.sgd(lr=0.1, momentum=0.8, nesterov=True)
+    optimizer = keras.optimizers.sgd(lr=0.01, momentum=0.8, nesterov=True)
     model = keras.models.Model(inputs=inputs, outputs=outputs)
     model.compile(loss=loss, optimizer=optimizer, metrics=[acc])
     return model
@@ -246,19 +246,29 @@ def main():
 
 
 if __name__ == "__main__":
-    ROOTDIR = "." # In order to run this on Google Colab, everything must be placed according to "~/Google Drive/Colab Notebooks/DeepFRET/"
-    DATANAME = "sim" # Suffix of the data name, separated by underscore (no need to write X, y)
-    TAG = None # Applies name tag to model name, if any is given
+    # In order to run this on Google Colab, everything must be placed
+    # according to "~/Google Drive/Colab Notebooks/DeepFRET/"
+    ROOTDIR = "."
+
+    # Suffix of the data name, separated by underscore (no need to write X, y)
+    DATANAME = "sim_v3"
+
+    # Applies name tag to model name, if any is given
+    TAG = None
 
     DATADIR = "data"
     OUTDIR = "output"
     TRAIN = True
     NEW_MODEL = True
 
-    EPOCHS = 1
-    PERCENT = 100 # Percentage of data to use
+    # Percentage of data to use
+    PERCENT = 100
+    # Set to None for variable length traces (not supported for all
+    # data/model setups)
+    N_TIMESTEPS = None
+
     BATCH_SIZE = 128
     CALLBACK_TIMEOUT = 3
-    N_TIMESTEPS = None  # Set to None for variable length traces (not supported for all data/model setups)
+    EPOCHS = 1
 
     main()
