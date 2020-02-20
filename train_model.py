@@ -6,8 +6,8 @@ import sklearn.model_selection
 from keras.layers import *
 from pathlib import Path
 
-GOOGLE_COLAB = "google.colab" in sys.modules
-if GOOGLE_COLAB:
+google_colab = "google.colab" in sys.modules
+if google_colab:
     sys.path.append("./gdrive/My Drive/Colab Notebooks/DeepFRET-Model")
     plt.style.use("default")
     config = tensorflow.ConfigProto(device_count={"GPU": 1})
@@ -25,206 +25,95 @@ import lib.ml
 import lib.utils
 
 
-def data(datadir):
-    X, y_label = lib.utils.load_npz_data(
-        top_percentage=PERCENT,
-        path=datadir,
-        set_names=("X_" + DATANAME, "y_" + DATANAME),
-    )
-    set_y = set(y_label.ravel())
-    print(X.shape)
-    print(set_y)
+def main(
+    running_on_google_colab,
+    datadir,
+    rootdir,
+    outdir,
+    percent_of_data,
+    regression,
+    dataname,
+    tag,
+    train,
+    new_model,
+    callback_timeout,
+    epochs,
+    batch_size,
+):
 
-    y = lib.ml.class_to_one_hot(y_label, num_classes=len(set_y))
+    if running_on_google_colab:
+        rootdir = (
+            "./gdrive/My Drive/Colab Notebooks"
+            + str(rootdir).split("Colab Notebooks")[-1]
+        )
+
+    rootdir = Path(rootdir)
+    outdir = rootdir.joinpath(outdir).expanduser()
+    datadir = rootdir.joinpath(datadir).expanduser()
+
+    X, labels = lib.utils.load_npz_data(
+        top_percentage=percent_of_data,
+        path=datadir,
+        set_names=("X_" + dataname, "y_" + dataname),
+    )
+
+    if not regression:
+        # Use labels as classification target
+        set_y = set(labels.ravel())
+        print(X.shape)
+        print(set_y)
+        y = lib.ml.class_to_one_hot(labels, num_classes=len(set_y))
+        y = lib.ml.smoothe_one_hot_labels(y, amount=0.1)
+        X = X[..., 0:3]
+    else:
+        # Use E_true column as regression target
+        y = X[..., 3]
+        X = X[..., 0:3]
+
     X = lib.utils.sample_max_normalize_3d(X)
     print("X: ", X.shape)
     print("Splitting dataset...")
-    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(
+    X_train, X_val, y_train, y_val = sklearn.model_selection.train_test_split(
         X, y, test_size=0.2, random_state=1
     )
-    return X_train, X_test, y_train, y_test
 
-
-class ResidualConv1D:
-    """
-    ResidualConv1D for use with best performing classifier
-    """
-
-    def __init__(self, filters, kernel_size, pool=False):
-        self.pool = pool
-        self.kernel_size = kernel_size
-        self.params = {
-            "padding": "same",
-            "kernel_initializer": "he_uniform",
-            "strides": 1,
-            "filters": filters,
-        }
-
-    def build(self, x):
-
-        res = x
-        if self.pool:
-            x = MaxPooling1D(1, padding="same")(x)
-            res = Conv1D(kernel_size=1, **self.params)(res)
-
-        out = Conv1D(kernel_size=1, **self.params)(x)
-
-        out = BatchNormalization()(out)
-        out = Activation("relu")(out)
-        out = Conv1D(kernel_size=self.kernel_size, **self.params)(out)
-
-        out = BatchNormalization()(out)
-        out = Activation("relu")(out)
-        out = Conv1D(kernel_size=self.kernel_size, **self.params)(out)
-
-        out = keras.layers.add([res, out])
-
-        return out
-
-    def __call__(self, x):
-        return self.build(x)
-
-
-def create_model(google_colab, n_features):
-    """
-    Creates Keras model that resulted in the best performing classifier so far
-    """
-
-    LSTM_ = CuDNNLSTM if google_colab else LSTM
-
-    inputs = Input(shape=(None, n_features))
-
-    x = Conv1D(
-        filters=32,
-        kernel_size=16,
-        padding="same",
-        kernel_initializer="he_uniform",
-    )(inputs)
-    x = BatchNormalization()(x)
-    x = Activation("relu")(x)
-
-    # residual net part
-    x = ResidualConv1D(filters=32, kernel_size=16, pool=True)(x)
-    x = ResidualConv1D(filters=32, kernel_size=16)(x)
-    x = ResidualConv1D(filters=32, kernel_size=16)(x)
-
-    x = ResidualConv1D(filters=64, kernel_size=12, pool=True)(x)
-    x = ResidualConv1D(filters=64, kernel_size=12)(x)
-    x = ResidualConv1D(filters=64, kernel_size=12)(x)
-
-    x = ResidualConv1D(filters=128, kernel_size=8, pool=True)(x)
-    x = ResidualConv1D(filters=128, kernel_size=8)(x)
-    x = ResidualConv1D(filters=128, kernel_size=8)(x)
-
-    x = ResidualConv1D(filters=256, kernel_size=4, pool=True)(x)
-    x = ResidualConv1D(filters=256, kernel_size=4)(x)
-    x = ResidualConv1D(filters=256, kernel_size=4)(x)
-
-    x = BatchNormalization()(x)
-    x = Activation("relu")(x)
-    x = MaxPooling1D(1, padding="same")(x)
-
-    x = Bidirectional(LSTM_(16, return_sequences=True))(x)
-    final = Dropout(rate=0.4)(x)
-
-    activation = "softmax"
-    loss = "categorical_crossentropy"
-    acc = "accuracy"
-
-    outputs = Dense(6, activation=activation)(final)
-    optimizer = keras.optimizers.sgd(lr=0.01, momentum=0.8, nesterov=True)
-    model = keras.models.Model(inputs=inputs, outputs=outputs)
-    model.compile(loss=loss, optimizer=optimizer, metrics=[acc])
-    return model
-
-
-def get_model(
-    n_features,
-    train,
-    new_model,
-    model_name,
-    model_path,
-    google_colab,
-    print_summary=True,
-):
-    """Loader for model"""
-    if train:
-        if new_model:
-            print("Created new model.")
-            model = create_model(
-                google_colab=google_colab, n_features=n_features
-            )
-        else:
-            try:
-                if TAG is not None:
-                    model_name = model_name.replace(
-                        "best_model", TAG + "_best_model"
-                    )
-                model = keras.models.load_model(
-                    str(model_path.joinpath(model_name))
-                )
-            except OSError:
-                print("No model found. Created new model.")
-                model = create_model(
-                    google_colab=google_colab, n_features=n_features
-                )
-    else:
-        print("Loading model from file..")
-        model = keras.models.load_model(str(model_path.joinpath(model_name)))
-
-    if print_summary:
-        model.summary()
-    return model
-
-
-def main():
-    global DATANAME
-    global ROOTDIR
-
-    model_name = "{}_best_model.h5".format(DATANAME)
-    if GOOGLE_COLAB:
-        ROOTDIR = (
-            "./gdrive/My Drive/Colab Notebooks"
-            + str(ROOTDIR).split("Colab Notebooks")[-1]
-        )
-
-    rootdir = Path(ROOTDIR)
-    datadir = rootdir.joinpath(DATADIR).expanduser()
-    outdir = rootdir.joinpath(OUTDIR).expanduser()
-
-    X_train, X_test, y_train, y_test = data(datadir=datadir)
+    model_name = "{}_best_model.h5".format(dataname)
 
     model = get_model(
         n_features=X_train.shape[-1],
-        train=TRAIN,
-        new_model=NEW_MODEL,
+        train=train,
+        new_model=new_model,
         model_name=model_name,
         model_path=outdir,
-        google_colab=GOOGLE_COLAB,
+        google_colab=running_on_google_colab,
+        tag=tag,
+        regression=regression,
     )
 
-    if TAG is not None:
-        DATANAME += "_" + TAG
-        model_name = model_name.replace("best_model", TAG + "_best_model")
+    if tag is not None:
+        dataname += "_" + tag
+        model_name = model_name.replace("best_model", tag + "_best_model")
 
-    if TRAIN:
+    if train:
         callbacks = lib.ml.generate_callbacks(
-            patience=CALLBACK_TIMEOUT, outdir=outdir, name=DATANAME
+            patience=callback_timeout, outdir=outdir, name=dataname
         )
         model.fit(
             x=X_train,
             y=y_train,
-            validation_data=(X_test, y_test),
-            epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
+            validation_data=(X_val, y_val),
+            epochs=epochs,
+            batch_size=batch_size,
             callbacks=callbacks,
         )
-        lib.plotting.plot_losses(logpath=outdir, outdir=outdir, name=DATANAME)
+        lib.plotting.plot_losses(logpath=outdir, outdir=outdir, name=dataname)
 
-        if GOOGLE_COLAB:
+        if running_on_google_colab:
             print("Converted model from GPU to CPU-compatible")
-            cpu_model = create_model(
-                google_colab=False, n_features=X_train.shape[-1]
+            cpu_model = create_deepconvlstm_model(
+                google_colab=False,
+                n_features=X_train.shape[-1],
+                regression=regression,
             )
             lib.ml.gpu_model_to_cpu(
                 trained_gpu_model=model,
@@ -234,41 +123,44 @@ def main():
             )
 
     print("Evaluating...")
-    y_pred = model.predict(X_test)
-    lib.plotting.plot_confusion_matrices(
-        y_target=y_test,
-        y_pred=y_pred,
-        y_is_binary=False,
-        targets_to_binary=[2, 3],
-        outdir=outdir,
-        name=DATANAME,
-    )
+    y_pred = model.predict(X_val)
+
+    if not regression:
+        lib.plotting.plot_confusion_matrices(
+            y_target=y_val,
+            y_pred=y_pred,
+            y_is_binary=False,
+            targets_to_binary=[2, 3],
+            outdir=outdir,
+            name=dataname,
+        )
 
 
 if __name__ == "__main__":
     # In order to run this on Google Colab, everything must be placed
     # according to "~/Google Drive/Colab Notebooks/DeepFRET/"
-    ROOTDIR = "."
+    main(
+        running_on_google_colab=google_colab,
+        regression=True,
+        train=True,
+        new_model=True,
+        rootdir=".",
+        datadir="data",
+        outdir="output",
+        dataname="sim",
+        tag="experimental",
+        percent_of_data=100,
+        batch_size=32,
+        epochs=10,
+        callback_timeout=3,
+    )
 
-    # Suffix of the data name, separated by underscore (no need to write X, y)
-    DATANAME = "sim_v3"
-
-    # Applies name tag to model name, if any is given
-    TAG = None
-
-    DATADIR = "data"
-    OUTDIR = "output"
-    TRAIN = True
-    NEW_MODEL = True
-
-    # Percentage of data to use
-    PERCENT = 100
-    # Set to None for variable length traces (not supported for all
-    # data/model setups)
-    N_TIMESTEPS = None
-
-    BATCH_SIZE = 128
-    CALLBACK_TIMEOUT = 3
-    EPOCHS = 1
-
-    main()
+    """
+    Description:
+    - Changed kernel sizes to be uneven (should improve convolutions and therefore accuracy?)
+    - Very large kernel sizes
+    - False negatives significantly lowered, while false positives slightly increased over model 9
+    - Label smoothing with amount = 0.05 (0.1 aggressively lowered confidence)
+    - Simulated new data with more states, 2 kinds of noise, much longer dark 
+    states, more traces
+    """

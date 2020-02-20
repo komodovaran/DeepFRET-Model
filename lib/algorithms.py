@@ -166,8 +166,9 @@ def generate_traces(
 
             # Make sure that each row/column sums to exactly 1
             if trans_prob != 0:
+                stay_prob = 1 - trans_prob
                 remaining_prob = 1 - trans_mat.sum(axis=0)
-                trans_mat[trans_mat == 0] += remaining_prob
+                trans_mat[trans_mat == stay_prob] += remaining_prob
 
         # Generate HMM model
         model = pg.HiddenMarkovModel.from_matrix(

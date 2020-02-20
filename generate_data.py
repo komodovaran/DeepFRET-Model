@@ -1,25 +1,44 @@
 from pathlib import Path
+
 import numpy as np
+
 import lib.algorithms
 import lib.ml
 import lib.utils
-from time import time
 
 
-def generate_data(n_traces, n_timesteps=200):
+def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
+    """
+
+    Parameters
+    ----------
+    n_traces:
+        Number of traces to generate
+    n_timesteps:
+        Length of each trace
+    labels_to_binary:
+        Whether to convert all labels to smFRET/not-smFRET (for each frame)
+    balance_classes:
+        Whether to balance classes based on the distribution of frame 1 (as
+        this changes over time due to bleaching)
+    outdir:
+        Output directory
+    """
+    n_traces = int(n_traces)
+
     print("Generating traces...")
     df = lib.algorithms.generate_traces(
         n_traces=n_traces,
-        aa_mismatch=(-0.30, 0.30),
+        aa_mismatch=(-0.35, 0.35),
         state_means="random",
         random_k_states_max=5,
-        min_state_diff=0.2,
+        min_state_diff=0.1,
         aggregation_prob=0.1,
         max_aggregate_size=7,
         trace_length=n_timesteps,
         trans_prob=(0.00, 0.20),
         blink_prob=0.2,
-        bleed_through =(0, 0.15),
+        bleed_through=(0, 0.15),
         noise=(0.01, 0.30),
         D_lifetime=300,
         A_lifetime=300,
@@ -31,34 +50,29 @@ def generate_data(n_traces, n_timesteps=200):
         discard_unbleached=False,
     )
 
-    X = df[["DD", "DA", "AA"]].values
-    y = df["label"].values
-    return X, y
+    X = df[["DD", "DA", "AA", "E_true"]].values
+    labels = df["label"].values
 
-
-def process_and_save(
-    X, y, labels_to_binary, balance_classes, outdir, n_timesteps=200
-):
-    X, y = lib.ml.preprocess_2d_timeseries_seq2seq(
-        X=X, y=y, n_timesteps=n_timesteps
+    X, labels = lib.ml.preprocess_2d_timeseries_seq2seq(
+        X=X, y=labels, n_timesteps=n_timesteps
     )
-    print("Before balance: ", set(y.ravel()))
+    print("Before balance: ", set(labels.ravel()))
     ext = False
 
     if labels_to_binary:
-        y = lib.ml.labels_to_binary(y, one_hot=False, to_ones=(2, 3))
+        labels = lib.ml.labels_to_binary(labels, one_hot=False, to_ones=(2, 3))
         ext = "_binary"
-        print("After binarize ", set(y.ravel()))
+        print("After binarize ", set(labels.ravel()))
 
     if balance_classes:
-        X, y = lib.ml.balance_classes(
-            X, y, exclude_label_from_limiting=0, frame=0
+        X, labels = lib.ml.balance_classes(
+            X, labels, exclude_label_from_limiting=0, frame=0
         )
-        print("After balance: ", set(y.ravel()))
+        print("After balance: ", set(labels.ravel()))
 
     assert not np.any(np.isnan(X))
 
-    for obj, name in zip((X, y), ("X_sim", "y_sim")):
+    for obj, name in zip((X, labels), ("X_sim", "y_sim")):
         if ext:
             name += ext
         path = str(Path(outdir).joinpath(name))
@@ -69,19 +83,10 @@ def process_and_save(
 
 
 if __name__ == "__main__":
-    DATADIR = "./data"
-    N_TRACES = int(1000)
-    LABELS_TO_BINARY = False
-
-    start = time()
-    X, y = generate_data(n_traces=N_TRACES)
-    process_and_save(
-        X,
-        y,
-        labels_to_binary=LABELS_TO_BINARY,
+    main(
+        n_traces=10000,
+        n_timesteps=300,
         balance_classes=True,
-        outdir=DATADIR,
+        labels_to_binary=False,
+        outdir="./data",
     )
-    end = time()
-
-    print("Time elapsed: {:.1f} s".format(end - start))

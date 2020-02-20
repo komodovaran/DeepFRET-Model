@@ -9,6 +9,13 @@ from send2trash import send2trash
 from tensorflow import keras
 
 
+def smoothe_one_hot_labels(y, amount):
+    """
+    Smoothes labels towards 0.5 for all classes.
+    """
+    return y * (1 - amount) + 0.5 * amount
+
+
 def labels_to_binary(y, one_hot, to_ones):
     """Converts group labels to binary labels, given desired targets"""
     if one_hot:
@@ -136,12 +143,12 @@ def generate_callbacks(
         min_lr=0,
     )
     return [
-            log,
-            early_stopping,
-            model_checkpoint,
-            weight_checkpoint,
-            reduce_lr,
-        ]
+        log,
+        early_stopping,
+        model_checkpoint,
+        weight_checkpoint,
+        reduce_lr,
+    ]
 
 
 def seq_probabilities(yi, skip_threshold=0.5, skip_column=0):
