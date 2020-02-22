@@ -27,19 +27,11 @@ def labels_to_binary(y, one_hot, to_ones):
 
 
 def preprocess_2d_timeseries_seq2seq(
-    X, y, n_timesteps, scaler=None, post_f=None
+    X, y, n_timesteps,
 ):
     """Preprocess X and y for seq2seq learning"""
     X = X.reshape(-1, n_timesteps, X.shape[1])
-
-    if scaler is not None:
-        X = np.array([scaler(xi) for xi in X])
-
-    if post_f is not None:
-        X = np.array([post_f(xi) for xi in X])
-
     y = y.reshape(-1, n_timesteps, 1)
-
     return X, y
 
 

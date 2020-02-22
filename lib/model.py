@@ -1,4 +1,5 @@
 from tensorflow import keras
+from tensorflow.python.keras import backend as K
 from tensorflow_core.python.keras import Input
 from tensorflow_core.python.keras.layers import (
     Activation,
@@ -7,14 +8,38 @@ from tensorflow_core.python.keras.layers import (
     CuDNNLSTM,
     Dense,
     Dropout,
+    Lambda,
     MaxPooling1D,
+    RepeatVector,
+    TimeDistributed,
     add,
 )
 from tensorflow_core.python.keras.layers.normalization_v2 import (
     BatchNormalization,
 )
 from tensorflow_core.python.keras.layers.recurrent_v2 import LSTM
-from tensorflow_core.python.keras.optimizer_v2.gradient_descent import SGD
+
+
+class VariableRepeatVector:
+    """
+    Tidies up the call to a lambda function by integrating it in a
+    layer-like wrapper
+
+    The two usages are identical:
+    decoded = VariableRepeatVector()([inputs, encoded])
+    decoded = Lambda(variable_repeat)([inputs, encoded])
+    """
+
+    @staticmethod
+    def variable_repeat(x):
+        # matrix with ones, shaped as (batch, steps, 1)
+        step_matrix = K.ones_like(x[0][:, :, :1])
+        # latent vars, shaped as (batch, 1, latent_dim)
+        latent_matrix = K.expand_dims(x[1], axis=1)
+        return K.batch_dot(step_matrix, latent_matrix)
+
+    def __call__(self, x):
+        return Lambda(self.variable_repeat)(x)
 
 
 class ResidualConv1D:
@@ -57,6 +82,29 @@ class ResidualConv1D:
         return self.build(x)
 
 
+def create_lstm_model(google_colab, n_features, regression):
+    LSTM_ = CuDNNLSTM if google_colab else LSTM
+
+    inputs = Input(shape=(None, n_features))
+
+    x = Bidirectional(LSTM_(units=128, return_sequences=True))(inputs)
+    x = Bidirectional(LSTM_(units=64, return_sequences=True))(x)
+    final = x
+
+    if regression:
+        outputs = TimeDistributed(Dense(1, activation=None))(final)
+        metric = "mse"
+        loss = "mse"
+    else:
+        outputs = TimeDistributed(Dense(6, activation="softmax"))(final)
+        metric = "accuracy"
+        loss = "categorical_crossentropy"
+
+    model = keras.models.Model(inputs=inputs, outputs=outputs)
+    model.compile(loss=loss, optimizer="adam", metrics=[metric])
+    return model
+
+
 def create_deepconvlstm_model(google_colab, n_features, regression):
     """
     Creates Keras model that resulted in the best performing classifier so far
@@ -76,41 +124,69 @@ def create_deepconvlstm_model(google_colab, n_features, regression):
     x = Activation("relu")(x)
 
     # residual net part
-    x = ResidualConv1D(filters=32, kernel_size=65, pool=True)(x)
+    x = ResidualConv1D(filters=32, kernel_size=65, pool=True)(x)  # 65
     x = ResidualConv1D(filters=32, kernel_size=65)(x)
     x = ResidualConv1D(filters=32, kernel_size=65)(x)
 
-    x = ResidualConv1D(filters=64, kernel_size=33, pool=True)(x)
+    x = ResidualConv1D(filters=64, kernel_size=33, pool=True)(x)  # 33
     x = ResidualConv1D(filters=64, kernel_size=33)(x)
     x = ResidualConv1D(filters=64, kernel_size=33)(x)
 
-    x = ResidualConv1D(filters=128, kernel_size=15, pool=True)(x)
+    x = ResidualConv1D(filters=128, kernel_size=15, pool=True)(x)  # 15
     x = ResidualConv1D(filters=128, kernel_size=15)(x)
     x = ResidualConv1D(filters=128, kernel_size=15)(x)
 
-    x = ResidualConv1D(filters=256, kernel_size=7, pool=True)(x)
+    x = ResidualConv1D(filters=256, kernel_size=7, pool=True)(x)  # 7
     x = ResidualConv1D(filters=256, kernel_size=7)(x)
     x = ResidualConv1D(filters=256, kernel_size=7)(x)
 
     x = BatchNormalization()(x)
     x = Activation("relu")(x)
     x = MaxPooling1D(1, padding="same")(x)
-
     x = Bidirectional(LSTM_(16, return_sequences=True))(x)
-    final = Dropout(rate=0.4)(x)
+    x = Dropout(rate=0.4)(x)
 
     if regression:
-        outputs = Dense(1, activation=None)(final)
+        outputs = Dense(1, activation=None)(x)
         metric = "mse"
         loss = "mse"
     else:
-        outputs = Dense(6, activation="softmax")(final)
+        outputs = Dense(9, activation="softmax")(x)
         metric = "accuracy"
         loss = "categorical_crossentropy"
 
-    optimizer = SGD(lr=0.01, momentum=0.8, nesterov=True)
     model = keras.models.Model(inputs=inputs, outputs=outputs)
-    model.compile(loss=loss, optimizer=optimizer, metrics=[metric])
+    model.compile(loss=loss, optimizer="adam", metrics=[metric])
+    return model
+
+
+def create_autoencoder(google_colab, n_features, regression):
+    units = 128
+
+    LSTM_ = CuDNNLSTM if google_colab else LSTM
+
+    inputs = Input(shape=(None, n_features))
+    x = Bidirectional(LSTM_(units, return_sequences=False))(inputs)
+    x = Dense(8)(x)
+    x = Activation("relu")(x)
+    x = VariableRepeatVector()([inputs, x])
+    x = Bidirectional(LSTM_(units, return_sequences=True))(x)
+
+    if regression:
+        x = TimeDistributed(Dense(1))(x)
+        outputs = Activation(None)(x)
+
+        metric = "mse"
+        loss = "mse"
+    else:
+        x = TimeDistributed(Dense(6))(x)
+        outputs = Activation("softmax")(x)
+
+        metric = "accuracy"
+        loss = "categorical_crossentropy"
+
+    model = keras.models.Model(inputs=inputs, outputs=outputs)
+    model.compile(loss=loss, optimizer="adam", metrics=[metric])
     return model
 
 
@@ -120,6 +196,7 @@ def get_model(
     new_model,
     model_name,
     model_path,
+    model_function,
     google_colab,
     regression,
     print_summary=True,
@@ -129,7 +206,7 @@ def get_model(
     if train:
         if new_model:
             print("Created new model.")
-            model = create_deepconvlstm_model(
+            model = model_function(
                 google_colab=google_colab,
                 n_features=n_features,
                 regression=regression,
@@ -145,7 +222,7 @@ def get_model(
                 )
             except OSError:
                 print("No model found. Created new model.")
-                model = create_deepconvlstm_model(
+                model = model_function(
                     google_colab=google_colab,
                     n_features=n_features,
                     regression=regression,

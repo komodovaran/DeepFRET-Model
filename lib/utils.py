@@ -1,6 +1,17 @@
 import os
+import random
+import sys
+
 import numpy as np
 import itertools
+
+
+def min_none(ls):
+    """Returns minimum value of list, and None if all elements are None"""
+    try:
+        return min(ls)
+    except TypeError:
+        return None
 
 
 def random_seed_mp(verbose=False):
@@ -73,3 +84,28 @@ def swap_integers(arr, x, y):
     a, b = (arr == x), (arr == y)
     arr[a], arr[b] = y, x
     return arr
+
+
+def generate_name(length=10, module=None):
+    """
+    Generates a random ID for a module
+    """
+    if module is None:
+        module = sys.modules[__name__]
+    while True:
+        name = "id{:0{length}d}".format(
+            random.randint(0, 10 ** length - 1), length=length
+        )
+        if not hasattr(module, name):
+            return name
+
+
+def global_function(func):
+    """
+    Decorate a local function to make it global, thus enabling
+    multiprocessing pickling of it
+    """
+    module = sys.modules[func.__module__]
+    func.__name__ = func.__qualname__ = generate_name(module=module)
+    setattr(module, func.__name__, func)
+    return func

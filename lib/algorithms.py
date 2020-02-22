@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
 import pomegranate as pg
-from retrying import retry, RetryError
-from tqdm import tqdm
+from retrying import RetryError, retry
+import parmap
 import lib.utils
+
+from lib.utils import global_function
 
 
 def generate_traces(
@@ -26,7 +28,7 @@ def generate_traces(
     null_fret_value=-1,
     acceptable_noise=0.25,
     scramble_prob=0.3,
-    add_gamma_noise=True,
+    gamma_noise_prob=0.5,
     merge_labels=False,
     discard_unbleached=False,
 ) -> pd.DataFrame:
@@ -88,9 +90,9 @@ def generate_traces(
     scramble_prob:
         Probability that the trace will end up being scrambled. This stacks with
         aggregation.
-    add_gamma_noise:
-        Multiply centered Gamma(1, 0.11) to each frame's noise, to make the data
-        appear less synthetic
+    gamma_noise_prob:
+        Probability to multiply centered Gamma(1, 0.11) to each frame's noise,
+        to make the data appear less synthetic
     merge_labels:
         Merges (dynamic, static) and (aggregate, noisy, scrambled) to deal with
         binary labels only
@@ -114,7 +116,7 @@ def generate_traces(
         return np.ones(len(E))
 
     @retry
-    def _generate_state_means(min_diff, k_states):
+    def generate_state_means(min_diff, k_states):
         """Returns random values and retries if they are too closely spaced"""
         states = np.random.uniform(0.01, 0.99, k_states)
         diffs = np.diff(sorted(states))
@@ -122,7 +124,7 @@ def generate_traces(
             raise RetryError
         return states
 
-    def _generate_fret_states(kind, state_means, trans_mat, trans_prob):
+    def generate_fret_states(kind, state_means, trans_mat, trans_prob):
         """Creates artificial FRET states"""
         if all(isinstance(s, float) for s in state_means):
             kind = "defined"
@@ -131,7 +133,7 @@ def generate_traces(
 
         if kind == "random":
             k_states = rand_k_states
-            state_means = _generate_state_means(min_state_diff, k_states)
+            state_means = generate_state_means(min_state_diff, k_states)
         elif kind == "aggregate":
             state_means = np.random.uniform(0, 1)
             k_states = 1
@@ -179,21 +181,99 @@ def generate_traces(
         E_true = np.array(model.sample(trace_length))
         return E_true
 
-    def _generate_trace(*args):
-        """Function to generate a single trace for parallel loop"""
-        nonlocal LABELS
-        nonlocal scramble_prob
+    def scramble(DD, DA, AA, cls, label):
+        """Scramble trace for model robustness"""
 
-        trans_prob, au_scaling_factor, noise, bleed_through, aa_mismatch, i = [
-            np.array(arg) for arg in args
-        ]
+        modify_trace = np.random.choice(("DD", "DA", "AA"))
+        if modify_trace == "DD":
+            c = DD
+        elif modify_trace == "DA":
+            c = DA
+        elif modify_trace == "AA":
+            c = AA
+        else:
+            raise ValueError
+
+        c[c != 0] = 1
+        # Create a sign wave and merge with trace
+        sinwave = np.sin(np.linspace(-10, np.random.randint(0, 1), len(DD)))
+        sinwave[c == 0] = 0
+        sinwave = sinwave ** np.random.randint(5, 10)
+        c += sinwave * 0.4
+        # Fix negatives
+        c = np.abs(c)
+
+        # Correlate heavily
+        DA *= AA * np.random.uniform(0.7, 1)
+        AA *= DA * np.random.uniform(0.7, 1)
+        DD *= AA * np.random.uniform(0.7, 1)
+
+        # Add dark state
+        add_dark = np.random.choice(("add", "noadd"))
+        if add_dark == "add":
+            dark_state_start = np.random.randint(0, 40)
+            dark_state_time = np.random.randint(10, 40)
+            dark_state_end = dark_state_start + dark_state_time
+            DD[dark_state_start:dark_state_end] = 0
+
+        # Add noise
+        if np.random.uniform(0, 1) < 0.1:
+            noise_start = np.random.randint(1, trace_length)
+            noise_time = np.random.randint(10, 50)
+            noise_end = noise_start + noise_time
+            if noise_end > trace_length:
+                noise_end = trace_length
+
+            DD[noise_start:noise_end] *= np.random.normal(
+                1, 1, noise_end - noise_start
+            )
+
+        # Flip traces
+        flip_trace = np.random.choice(("flipDD", "flipDA", "flipAA"))
+        if flip_trace == "flipDD":
+            DD = np.flip(DD)
+        elif flip_trace == "flipAA":
+            AA = np.flip(AA)
+        elif flip_trace == "flipDA":
+            DA = np.flip(DA)
+
+        DD, DA, AA = [np.abs(x) for x in (DD, DA, AA)]
+
+        label.fill(cls["scramble"])
+        return DD, DA, AA, label
+
+    @global_function
+    def generate_single_trace(*args):
+        """Function to generate a single trace"""
+        (
+            i,
+            trans_prob,
+            au_scaling_factor,
+            noise,
+            bleed_through,
+            aa_mismatch,
+            scramble_prob,
+        ) = [np.array(arg) for arg in args]
+
+        # Simple table to keep track of labels
+        cls = {
+            "bleached": 0,
+            "aggregate": 1,
+            "noisy": 2,
+            "scramble": 3,
+            "1-state": 4,
+            "2-state": 5,
+            "3-state": 6,
+            "4-state": 7,
+            "5-state": 8,
+        }
 
         name = [i.tolist()] * trace_length
         frames = np.arange(1, trace_length + 1, 1)
 
         if np.random.uniform(0, 1) < aggregation_prob:
-            aggregated = True
-            E_true = _generate_fret_states(
+            is_aggregated = True
+            E_true = generate_fret_states(
                 kind="aggregate",
                 trans_mat=trans_mat,
                 trans_prob=0,
@@ -208,10 +288,10 @@ def generate_traces(
             if n_pairs == 0:
                 n_pairs = 2
         else:
-            aggregated = False
+            is_aggregated = False
             n_pairs = 1
             trans_prob = np.random.uniform(trans_prob.min(), trans_prob.max())
-            E_true = _generate_fret_states(
+            E_true = generate_fret_states(
                 kind=state_means,
                 trans_mat=trans_mat,
                 trans_prob=trans_prob,
@@ -220,27 +300,20 @@ def generate_traces(
 
         DD_total, DA_total, AA_total = [], [], []
         first_bleach_all = []
+
         for j in range(n_pairs):
             np.random.seed()
             if D_lifetime is not None:
-                bleach_D = (
-                    np.ceil(np.random.exponential(D_lifetime, 1))
-                    .astype(int)
-                    .squeeze()
-                )
+                bleach_D = int(np.ceil(np.random.exponential(D_lifetime)))
             else:
-                bleach_D = trace_length + 1
+                bleach_D = None
 
             if A_lifetime is not None:
-                bleach_A = (
-                    np.ceil(np.random.exponential(A_lifetime, 1))
-                    .astype(int)
-                    .squeeze()
-                )
+                bleach_A = int(np.ceil(np.random.exponential(A_lifetime)))
             else:
-                bleach_A = trace_length + 1
+                bleach_A = None
 
-            first_bleach = min(bleach_D, bleach_A)
+            first_bleach = lib.utils.min_none((bleach_D, bleach_A))
             first_bleach_all.append(first_bleach)
 
             # Calculate from underlying E
@@ -250,196 +323,181 @@ def generate_traces(
 
             # In case AA intensity doesn't correspond exactly to donor
             # experimentally (S will be off)
-            AA += np.random.uniform(aa_mismatch.min(), aa_mismatch.max(), 1)
+            AA += np.random.uniform(aa_mismatch.min(), aa_mismatch.max())
 
-            # Donor bleaches first
-            if first_bleach == bleach_D:
-                DD[bleach_D:] = 0  # Donor bleaches
-                DA[
-                    bleach_D:
-                ] = 0  # DA goes to zero because no energy is transferred
+            # If donor bleaches first
+            if first_bleach is not None:
+                if first_bleach == bleach_D:
+                    # Donor bleaches
+                    DD[bleach_D:] = 0
+                    # DA goes to zero because no energy is transferred
+                    DA[bleach_D:] = 0
 
-            # Acceptor bleaches first
-            elif first_bleach == bleach_A:
-                DD[bleach_A:bleach_D] = 1  # Donor is 1 when there's no acceptor
-                if aggregated and n_pairs <= 2:
-                    spike_len = np.min((np.random.randint(2, 10), bleach_D))
-                    DD[bleach_A : bleach_A + spike_len] = 2
+                # If acceptor bleaches first
+                elif first_bleach == bleach_A:
+                    # Donor is 1 when there's no acceptor
+                    DD[bleach_A:bleach_D] = 1
+                    if is_aggregated and n_pairs <= 2:
+                        # Sudden spike for small aggregates to mimic
+                        # observations
+                        spike_len = np.min((np.random.randint(2, 10), bleach_D))
+                        DD[bleach_A : bleach_A + spike_len] = 2
 
             # No matter what, zero each signal after its own bleaching
-            for s, b in zip((DD, DA, AA), (bleach_D, bleach_A, bleach_A)):
-                s[b:] = 0
+            if bleach_D is not None:
+                DD[bleach_D:] = 0
+            if bleach_A is not None:
+                DA[bleach_A:] = 0
+                AA[bleach_A:] = 0
 
+            # Append to total fluorophore intensity per channel
             DD_total.append(DD)
             DA_total.append(DA)
             AA_total.append(AA)
 
-        first_bleach_all = first_bleach_all[0]
-        totals = (DD_total, DA_total, AA_total)
-        signals = [np.sum(x, axis=0) for x in totals]
+        DD, DA, AA = [np.sum(x, axis=0) for x in (DD_total, DA_total, AA_total)]
+
+        # Initialize -1 label for whole trace
         label = np.zeros(trace_length)
+        label.fill(-1)
 
-        DD, DA, AA = signals
+        # Calculate when a channel is bleached. For aggregates, it's when a
+        # fluorophore channel hits 0 from bleaching (because 100% FRET not
+        # considered possible)
+        if is_aggregated:
+            # First bleaching for
+            bleach_DD_all = np.argmax(DD == 0)
+            bleach_DA_all = np.argmax(DA == 0)
+            bleach_AA_all = np.argmax(AA == 0)
 
-        if not aggregated:
-            p = np.random.uniform(0, 1)
-            if p < blink_prob:
-                if first_bleach_all > 1:
-                    blink_start = np.random.randint(1, trace_length)
-                    blink_time = np.random.randint(1, 15)
-                    if blink_start + blink_time < first_bleach_all:
-                        # Set intensities
-                        DA[blink_start : blink_start + blink_time] = 0
-                        AA[blink_start : blink_start + blink_time] = 0
-                        E_true[
-                            blink_start : blink_start + blink_time
-                        ] = null_fret_value
-
-        signals = DD, DA, AA
-
-        for n in range(3):
-            if aggregated:
-                label[signals[n] != LABELS["bleached"]] = LABELS["aggregate"]
-            else:
-                label[signals[n] != LABELS["bleached"]] = LABELS["dynamic"]
-
-        for n in range(3):  # Label any bleached points zero
-            label[signals[n] == LABELS["bleached"]] = LABELS["bleached"]
-
-        if label.all() != LABELS["bleached"]:
-            first_bleach_all = None
+            # Find first bleaching overall
+            first_bleach_all = lib.utils.min_none(
+                (bleach_DD_all, bleach_DA_all, bleach_AA_all)
+            )
+            if first_bleach_all == 0:
+                first_bleach_all = None
+            label.fill(cls["aggregate"])
         else:
-            first_bleach_all = label.argmin()
+            # Else simply check whether DD or DA bleaches first from lifetimes
+            first_bleach_all = lib.utils.min_none(first_bleach_all)
 
-        if not aggregated:
-            if first_bleach_all is not None:
-                E_true[first_bleach_all:] = null_fret_value
-        else:
-            E_true = [null_fret_value] * trace_length
+        # Save unblinked fluorophores to calculate E_true
+        DD_no_blink, DA_no_blink = DD.copy(), DA.copy()
 
-        p = np.random.uniform(0, 1)
-        if p < scramble_prob:  # do weird stuff to the trace
-            if n_pairs <= 2:
-                # Modify trace with weird correlations
-                modify_trace = np.random.choice(("DD", "DA", "AA"))
-                if modify_trace == "DD":
-                    DD[DD != 0] = 1
-                    sinwave = np.sin(
-                        np.linspace(-10, np.random.randint(0, 1), len(DD))
-                    )  # Create a sign wave and merge with trace
-                    sinwave[DD == 0] = 0
-                    sinwave = sinwave ** np.random.randint(5, 10)
-                    DD += sinwave * 0.4
-                    DD[DD < 0] = 0  # first signal
-                elif modify_trace == "DA":
-                    DA *= AA * np.random.uniform(0.7, 1, 1)
-                elif modify_trace == "AA":
-                    # Correlate heavily
-                    AA *= DA * np.random.uniform(0.7, 1, 1)
+        # No blinking in aggregates (excessive/complicated)
+        if not is_aggregated:
+            if np.random.uniform(0, 1) < blink_prob:
+                blink_start = np.random.randint(1, trace_length)
+                blink_time = np.random.randint(1, 15)
+
+                # Blink either donor or acceptor
+                if np.random.uniform(0, 1) < 0.5:
+                    DD[blink_start : (blink_start + blink_time)] = 0
+                    DA[blink_start : (blink_start + blink_time)] = 0
                 else:
-                    pass
+                    DA[blink_start : (blink_start + blink_time)] = 0
+                    AA[blink_start : (blink_start + blink_time)] = 0
 
-                # Add dark state
-                add_dark = np.random.choice(("add", "noadd"))
-                if add_dark == "add":
-                    dark_state_start = np.random.randint(0, 50)
-                    dark_state_time = np.random.randint(10, 50)
-                    dark_state_end = dark_state_start + dark_state_time
-                    DD[dark_state_start:dark_state_end] = 0
-                else:
-                    pass
+        if first_bleach_all is not None:
+            label[first_bleach_all:] = cls["bleached"]
+            E_true[first_bleach_all:] = null_fret_value
 
-                # Add noise
-                p = np.random.uniform(0, 1)
-                if p < 0.1:
-                    noise_start = np.random.randint(1, trace_length)
-                    noise_time = np.random.randint(10, 50)
-                    noise_end = noise_start + noise_time
-                    if noise_end > trace_length:
-                        noise_end = trace_length
+        for x in (DD, DA, AA):
+            # Bleached points get label 0
+            label[x == 0] = cls["bleached"]
 
-                    DD[noise_start:noise_end] *= np.random.normal(
-                        1, 1, noise_end - noise_start
-                    )
+        if is_aggregated:
+            first_bleach_all = np.argmin(label)
+            if first_bleach_all == 0:
+                first_bleach_all = None
 
-                # Flip traces
-                flip_trace = np.random.choice(("flipDD", "flipDA", "flipAA"))
-                if flip_trace == "flipDD":
-                    DD = np.flip(DD)
-                elif flip_trace == "flipAA":
-                    AA = np.flip(AA)
-                elif flip_trace == "flipDA":
-                    DA = np.flip(DA)
-                else:
-                    pass
+        # Scramble trace, but only if contains 1 or 2 pairs (diminishing
+        # effect otherwise)
+        is_scrambled = False
+        if np.random.uniform(0, 1) < scramble_prob and n_pairs <= 2:
+            DD, DA, AA, label = scramble(
+                DD=DD, DA=DA, AA=AA, cls=cls, label=label
+            )
+            is_scrambled = True
 
-                DD[DD < 0] = 0  # fix multiplication below zero
-                DA[DA < 0] = 0
-                AA[AA < 0] = 0
+        # Figure out bleached places before true signal is modified:
+        is_bleached = np.zeros(trace_length)
+        for x in (DD, DA, AA):
+            is_bleached[x == 0] = 1
 
-                label[
-                    (label == LABELS["dynamic"]) | (label == LABELS["static"])
-                ] = LABELS["scramble"]
-
-                # Figure out bleached places:
-                label[DD == 0] = LABELS["bleached"]
-                label[AA == 0] = LABELS["bleached"]
-
+        # Add donor bleed-through
         DD_bleed = np.random.uniform(bleed_through.min(), bleed_through.max())
         DA[DD != 0] += DD_bleed
 
-        signals = DD, DA, AA
+        # Re-adjust E_true to match offset caused by correction factors
+        # so technically it's not the true, corrected FRET, but actually the
+        # un-noised
+        E_true[E_true != null_fret_value] = _E(
+            DD_no_blink[E_true != null_fret_value],
+            DA_no_blink[E_true != null_fret_value],
+        )
 
+        # Add gaussian noise
         noise = np.random.uniform(noise.min(), noise.max())
-        observed_states = np.unique(E_true[E_true != null_fret_value])
+        x = [s + np.random.normal(0, noise, len(s)) for s in (DD, DA, AA)]
 
-        signals = [s + np.random.normal(0, noise, len(s)) for s in signals]
+        # Add centered gamma noise
+        if np.random.uniform(0, 1) < gamma_noise_prob:
+            for signal in x:
+                gnoise = np.random.gamma(1, noise * 1.1, len(signal))
+                signal += gnoise
+                signal -= np.mean(gnoise)
 
-        if add_gamma_noise:
-            for s in signals:
-                gnoise = np.random.gamma(1, noise * 1.1, len(s))
-                s += gnoise
-                s -= np.mean(gnoise)
-
+        # Scale trace to AU units and calculate observed E and S as one would
+        # in real experiments
         au_scaling_factor = np.random.uniform(
             au_scaling_factor.min(), au_scaling_factor.max()
         )
-        signals = [s * au_scaling_factor for s in signals]
-
-        DD, DA, AA = signals
+        DD, DA, AA = [s * au_scaling_factor for s in x]
 
         E_obs = _E(DD, DA)
         S_obs = _S(DD, DA, AA)
 
-        E_nb = E_obs[E_true != null_fret_value]
+        # FRET from fluorophores that aren't bleached
+        E_unbleached = E_obs[:first_bleach_all]
+        E_unbleached_true = E_true[:first_bleach_all]
 
-        if len(observed_states) == 1:
-            if np.std(E_nb) > acceptable_noise:
-                label[label == LABELS["dynamic"]] = LABELS["noisy"]
-            else:
-                # else, keep as single-state traces
-                label[label == LABELS["dynamic"]] = LABELS["static"]
-        else:
-            for s in observed_states:
-                if np.std(E_obs[E_true == s]) > acceptable_noise:
-                    label[
-                        (label == LABELS["dynamic"])
-                        | (label == LABELS["static"])
-                    ] = LABELS["noisy"]
+        # Count actually observed states, because a slow system might not
+        # transition in the observation window
+        observed_states = np.unique(E_true[E_true != null_fret_value])
 
+        # Calculate noise level for each FRET state, and check if it
+        # surpasses the limit
+        is_noisy = False
+        for state in observed_states:
+            noise_level = np.std(E_unbleached[E_unbleached_true == state])
+            if noise_level > acceptable_noise:
+                label[label != cls["bleached"]] = cls["noisy"]
+                is_noisy = True
+
+        # For all FRET traces, assign the number of states observed
+        if not any((is_noisy, is_aggregated, is_scrambled)):
+            for i in range(5):
+                k_states = i + 1
+                if len(observed_states) == k_states:
+                    label[label != cls["bleached"]] = cls[
+                        "{}-state".format(k_states)
+                    ]
+
+        # Bad traces don't contain FRET
+        if any((is_noisy, is_aggregated, is_scrambled)):
+            E_true.fill(-1)
+
+        # Everything that isn't FRET is 0, and FRET is 1
         if merge_labels:
-            label[
-                (label != LABELS["dynamic"]) | (label != LABELS["static"])
-            ] = 0
-            label[
-                (label == LABELS["dynamic"]) | (label == LABELS["static"])
-            ] = 1
+            label[label <= 3] = 0
+            label[label >= 4] = 1
 
         if discard_unbleached:
-            if label[-1] != LABELS["bleached"]:
+            if label[-1] != cls["bleached"]:
                 return pd.DataFrame()
 
-        s = pd.DataFrame(
+        trace = pd.DataFrame(
             {
                 "DD": DD,
                 "DA": DA,
@@ -453,27 +511,20 @@ def generate_traces(
                 "label": label,
             }
         )
-        s.replace([np.inf, -np.inf], np.nan, inplace=True)
-        s.fillna(method="pad", inplace=True)
-        return s
+        trace.replace([np.inf, -np.inf], np.nan, inplace=True)
+        trace.fillna(method="pad", inplace=True)
+        return trace
 
-    LABELS = {
-        "bleached": 0,
-        "aggregate": 1,
-        "dynamic": 2,
-        "static": 3,
-        "noisy": 4,
-        "scramble": 5,
-    }
-
-    processes = tqdm(range(n_traces))
-
-    traces = [
-        _generate_trace(
-            trans_prob, au_scaling_factor, noise, bleed_through, aa_mismatch, i
-        )
-        for i in processes
-    ]
+    traces = parmap.map(
+        generate_single_trace,
+        range(n_traces),
+        trans_prob,
+        au_scaling_factor,
+        noise,
+        bleed_through,
+        aa_mismatch,
+        scramble_prob,
+    )
 
     if len(traces) > 1:
         traces = pd.concat(traces)

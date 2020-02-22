@@ -3,3 +3,5 @@
 /output/*.h5
 /output/*.pdf
 /output/*.log
+test.py
+*.ipynb
