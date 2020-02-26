@@ -158,7 +158,7 @@ if __name__ == "__main__":
         tag="experimental",
         percent_of_data=100,
         batch_size=32,
-        epochs=100,
+        epochs=1,
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,

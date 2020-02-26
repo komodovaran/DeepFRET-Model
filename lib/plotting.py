@@ -77,7 +77,6 @@ def _plot_confusion_matrix_mlxtend(
     conf_mat,
     hide_spines=False,
     hide_ticks=False,
-    figsize=None,
     cmap=None,
     colorbar=False,
     show_absolute=True,
@@ -128,10 +127,10 @@ def _plot_confusion_matrix_mlxtend(
     total_samples = conf_mat.sum(axis=1)[:, np.newaxis]
     normed_conf_mat = conf_mat.astype("float") / total_samples
 
-    if figsize is None:
-        figsize = (len(conf_mat) * 1.25, len(conf_mat) * 1.25)
+    scale = 0.8 if len(conf_mat) > 2 else 1.3
+    figsize = (len(conf_mat) * scale, len(conf_mat) * scale)
 
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize = figsize)
     ax.grid(False)
     if cmap is None:
         cmap = plt.cm.Blues
@@ -268,11 +267,14 @@ def plot_confusion_matrices(
                 "",
                 "bleached",
                 "aggregate",
-                "dynamic",
-                "static",
                 "noisy",
-                "scrambled",
-            ]  # default layout
+                "scramble",
+                "1-state",
+                "2-state",
+                "3-state",
+                "4-state",
+                "5-state",
+            ]
 
         fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
         ax.set_yticklabels(l)

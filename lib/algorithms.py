@@ -10,27 +10,27 @@ from lib.utils import global_function
 
 def generate_traces(
     n_traces,
-    state_means="random",
-    random_k_states_max=2,
-    min_state_diff=0.1,
-    D_lifetime=400,
-    A_lifetime=200,
-    blink_prob=0.05,
-    bleed_through=0,
-    aa_mismatch=(-0.3, 0.3),
-    trace_length=200,
-    trans_prob=0.1,
-    noise=0.08,
-    trans_mat=None,
-    au_scaling_factor=1,
-    aggregation_prob=0.1,
-    max_aggregate_size=100,
-    null_fret_value=-1,
-    acceptable_noise=0.25,
-    scramble_prob=0.3,
-    gamma_noise_prob=0.5,
-    merge_labels=False,
-    discard_unbleached=False,
+    state_means = "random",
+    random_k_states_max = 2,
+    min_state_diff = 0.1,
+    D_lifetime = 400,
+    A_lifetime = 200,
+    blink_prob = 0.05,
+    bleed_through = 0,
+    aa_mismatch = (-0.3, 0.3),
+    trace_length = 200,
+    trans_prob = 0.1,
+    noise = 0.08,
+    trans_mat = None,
+    au_scaling_factor = 1,
+    aggregation_prob = 0.1,
+    max_aggregate_size = 100,
+    null_fret_value = -1,
+    acceptable_noise = 0.25,
+    scramble_prob = 0.3,
+    gamma_noise_prob = 0.5,
+    merge_labels = False,
+    discard_unbleached = False,
 ) -> pd.DataFrame:
     """
     Parameters
@@ -116,11 +116,11 @@ def generate_traces(
         return np.ones(len(E))
 
     @retry
-    def generate_state_means(min_diff, k_states):
+    def generate_state_means(min_acceptable_diff, k_states):
         """Returns random values and retries if they are too closely spaced"""
         states = np.random.uniform(0.01, 0.99, k_states)
         diffs = np.diff(sorted(states))
-        if any(diffs < min_diff):
+        if any(diffs < min_acceptable_diff):
             raise RetryError
         return states
 
@@ -147,7 +147,7 @@ def generate_traces(
                 # random_k_states_max of these)
                 k_states = rand_k_states
                 state_means = np.random.choice(
-                    state_means, size=k_states, replace=False
+                    state_means, size = k_states, replace = False
                 )
 
         if type(state_means) == float:
@@ -169,12 +169,12 @@ def generate_traces(
             # Make sure that each row/column sums to exactly 1
             if trans_prob != 0:
                 stay_prob = 1 - trans_prob
-                remaining_prob = 1 - trans_mat.sum(axis=0)
+                remaining_prob = 1 - trans_mat.sum(axis = 0)
                 trans_mat[trans_mat == stay_prob] += remaining_prob
 
         # Generate HMM model
         model = pg.HiddenMarkovModel.from_matrix(
-            trans_mat, distributions=dists, starts=starts
+            trans_mat, distributions = dists, starts = starts
         )
         model.bake()
 
@@ -257,15 +257,15 @@ def generate_traces(
 
         # Simple table to keep track of labels
         cls = {
-            "bleached": 0,
+            "bleached" : 0,
             "aggregate": 1,
-            "noisy": 2,
-            "scramble": 3,
-            "1-state": 4,
-            "2-state": 5,
-            "3-state": 6,
-            "4-state": 7,
-            "5-state": 8,
+            "noisy"    : 2,
+            "scramble" : 3,
+            "1-state"  : 4,
+            "2-state"  : 5,
+            "3-state"  : 6,
+            "4-state"  : 7,
+            "5-state"  : 8,
         }
 
         name = [i.tolist()] * trace_length
@@ -274,10 +274,10 @@ def generate_traces(
         if np.random.uniform(0, 1) < aggregation_prob:
             is_aggregated = True
             E_true = generate_fret_states(
-                kind="aggregate",
-                trans_mat=trans_mat,
-                trans_prob=0,
-                state_means=state_means,
+                kind = "aggregate",
+                trans_mat = trans_mat,
+                trans_prob = 0,
+                state_means = state_means,
             )
             if max_aggregate_size >= 2:
                 aggregate_size = np.random.randint(2, max_aggregate_size + 1)
@@ -292,10 +292,10 @@ def generate_traces(
             n_pairs = 1
             trans_prob = np.random.uniform(trans_prob.min(), trans_prob.max())
             E_true = generate_fret_states(
-                kind=state_means,
-                trans_mat=trans_mat,
-                trans_prob=trans_prob,
-                state_means=state_means,
+                kind = state_means,
+                trans_mat = trans_mat,
+                trans_prob = trans_prob,
+                state_means = state_means,
             )
 
         DD_total, DA_total, AA_total = [], [], []
@@ -341,7 +341,7 @@ def generate_traces(
                         # Sudden spike for small aggregates to mimic
                         # observations
                         spike_len = np.min((np.random.randint(2, 10), bleach_D))
-                        DD[bleach_A : bleach_A + spike_len] = 2
+                        DD[bleach_A: bleach_A + spike_len] = 2
 
             # No matter what, zero each signal after its own bleaching
             if bleach_D is not None:
@@ -355,7 +355,8 @@ def generate_traces(
             DA_total.append(DA)
             AA_total.append(AA)
 
-        DD, DA, AA = [np.sum(x, axis=0) for x in (DD_total, DA_total, AA_total)]
+        DD, DA, AA = [np.sum(x, axis = 0) for x in
+                      (DD_total, DA_total, AA_total)]
 
         # Initialize -1 label for whole trace
         label = np.zeros(trace_length)
@@ -392,11 +393,11 @@ def generate_traces(
 
                 # Blink either donor or acceptor
                 if np.random.uniform(0, 1) < 0.5:
-                    DD[blink_start : (blink_start + blink_time)] = 0
-                    DA[blink_start : (blink_start + blink_time)] = 0
+                    DD[blink_start: (blink_start + blink_time)] = 0
+                    DA[blink_start: (blink_start + blink_time)] = 0
                 else:
-                    DA[blink_start : (blink_start + blink_time)] = 0
-                    AA[blink_start : (blink_start + blink_time)] = 0
+                    DA[blink_start: (blink_start + blink_time)] = 0
+                    AA[blink_start: (blink_start + blink_time)] = 0
 
         if first_bleach_all is not None:
             label[first_bleach_all:] = cls["bleached"]
@@ -416,7 +417,7 @@ def generate_traces(
         is_scrambled = False
         if np.random.uniform(0, 1) < scramble_prob and n_pairs <= 2:
             DD, DA, AA, label = scramble(
-                DD=DD, DA=DA, AA=AA, cls=cls, label=label
+                DD = DD, DA = DA, AA = AA, cls = cls, label = label
             )
             is_scrambled = True
 
@@ -497,22 +498,31 @@ def generate_traces(
             if label[-1] != cls["bleached"]:
                 return pd.DataFrame()
 
+        if label[0] in [4, 5, 6, 7, 8]:
+            min_diff = np.min(np.diff(state_means))
+        else:
+            min_diff = np.nan
+
+        # Columns pre-fixed with underscore contain metadata, and only the
+        # first value should be used (repeated because table structure)
         trace = pd.DataFrame(
             {
-                "DD": DD,
-                "DA": DA,
-                "AA": AA,
-                "E": E_obs,
-                "E_true": E_true,
-                "S": S_obs,
-                "frame": frames,
-                "name": name,
-                "fb": [first_bleach_all] * trace_length,
-                "label": label,
+                "DD"            : DD,
+                "DA"            : DA,
+                "AA"            : AA,
+                "E"             : E_obs,
+                "E_true"        : E_true,
+                "S"             : S_obs,
+                "frame"         : frames,
+                "name"          : name,
+                "label"         : label,
+                "_bleaches_at"   : first_bleach_all.repeat(trace_length),
+                "_noise_level"   : noise.repeat(trace_length),
+                "_min_state_diff": min_diff.repeat(trace_length),
             }
         )
-        trace.replace([np.inf, -np.inf], np.nan, inplace=True)
-        trace.fillna(method="pad", inplace=True)
+        trace.replace([np.inf, -np.inf], np.nan, inplace = True)
+        trace.fillna(method = "pad", inplace = True)
         return trace
 
     traces = parmap.map(

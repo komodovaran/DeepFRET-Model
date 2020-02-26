@@ -51,7 +51,8 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
     X = df[["DD", "DA", "AA", "E", "E_true"]].values
 
     if np.any(X == -1):
-        print("Dataset contains negative E_true. Be careful with regression!")
+        print("Dataset contains negative E_true. Be careful if using this "
+              "for regression!")
 
     labels = df["label"].values
 
@@ -70,7 +71,7 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         X, labels = lib.ml.balance_classes(
             X, labels, exclude_label_from_limiting=0, frame=0
         )
-        print("After balance: ", set(labels.ravel()))
+        print("After balance:  ", set(labels.ravel()))
 
     assert not np.any(np.isnan(X))
 
@@ -86,7 +87,7 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
 
 if __name__ == "__main__":
     main(
-        n_traces=10000,
+        n_traces=300000,
         n_timesteps=300,
         balance_classes=True,
         labels_to_binary=False,

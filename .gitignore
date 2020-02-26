@@ -1,7 +1,4 @@
 /venv
 /data/*.npz
-/output/*.h5
-/output/*.pdf
-/output/*.log
+/output/*
 test.py
-*.ipynb
