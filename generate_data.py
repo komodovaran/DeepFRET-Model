@@ -5,6 +5,8 @@ import numpy as np
 import lib.algorithms
 import lib.ml
 import lib.utils
+import lib.plotting
+import matplotlib.pyplot as plt
 
 
 def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
@@ -32,27 +34,31 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         random_k_states_max=5,
         min_state_diff=0.1,
         aggregation_prob=0.15,
-        max_aggregate_size=10,
+        max_aggregate_size=20,
         trace_length=n_timesteps,
         trans_prob=(0.0, 0.20),
         blink_prob=0.2,
         bleed_through=(0, 0.15),
-        noise=(0.01, 0.30),
-        D_lifetime=200,
-        A_lifetime=200,
-        au_scaling_factor=(1),
-        null_fret_value=-1,
+        noise=(0.01, 0.26),
         acceptable_noise=0.25,
+        D_lifetime=500,
+        A_lifetime=500,
+        falloff_lifetime=500,
+        falloff_prob=0.1,
         scramble_prob=0.15,
         gamma_noise_prob=0.8,
+        au_scaling_factor=(1),
+        null_fret_value=-1,
         discard_unbleached=False,
     )
 
     X = df[["DD", "DA", "AA", "E", "E_true"]].values
 
     if np.any(X == -1):
-        print("Dataset contains negative E_true. Be careful if using this "
-              "for regression!")
+        print(
+            "Dataset contains negative E_true. Be careful if using this "
+            "for regression!"
+        )
 
     labels = df["label"].values
 
@@ -73,6 +79,8 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         )
         print("After balance:  ", set(labels.ravel()))
 
+    lib.plotting.plot_trace_label_distribution(X=X, y=labels)
+
     assert not np.any(np.isnan(X))
 
     for obj, name in zip((X, labels), ("X_sim", "y_sim")):
@@ -84,12 +92,14 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
     print(X.shape)
     print("Generated {} traces".format(X.shape[0]))
 
+    plt.show()
+
 
 if __name__ == "__main__":
     main(
-        n_traces=300000,
+        n_traces=150000,
         n_timesteps=300,
-        balance_classes=True,
+        balance_classes=False,
         labels_to_binary=False,
         outdir="./data",
     )

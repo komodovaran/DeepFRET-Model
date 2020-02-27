@@ -130,7 +130,7 @@ def _plot_confusion_matrix_mlxtend(
     scale = 0.8 if len(conf_mat) > 2 else 1.3
     figsize = (len(conf_mat) * scale, len(conf_mat) * scale)
 
-    fig, ax = plt.subplots(figsize = figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     ax.grid(False)
     if cmap is None:
         cmap = plt.cm.Blues
@@ -340,3 +340,68 @@ def plot_category(y, ax, colors=None, alpha=0.2):
             alpha=alpha,
             facecolor=colors[label],
         )
+
+
+def plot_trace_label_distribution(X, y, method="multi"):
+    """
+    Plots the distribution of labels over time
+    """
+    if method == "binary":
+        pal = ["#F19E9B", "#A4CC9E"]
+        lbs = ["Non-usable", "Usable"]
+        labels = [0, 1]
+        y = lib.ml.labels_to_binary(y, one_hot=False, to_ones=(4, 5, 6, 7, 8))
+    elif method == "multi":
+        if len(np.unique(y)) == 2:
+            pal = ["#F19E9B", "seagreen"]
+            lbs = ["Non-usable", "Usable"]
+            labels = [0, 1]
+        else:
+
+            pal = (
+                "darkgrey",
+                "red",
+                "royalblue",
+                "mediumvioletred",
+                "orange",
+                "lightgreen",
+                "springgreen",
+                "limegreen",
+                "green",
+            )
+
+            lbs = (
+                "Bleached",
+                "Aggregate",
+                "Noisy",
+                "Scramble",
+                "1-state",
+                "2-state",
+                "3-state",
+                "4-state",
+                "5-state",
+            )
+            labels = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    else:
+        raise ValueError
+
+    label_count = []
+    for label in labels:
+        masked = np.ma.masked_not_equal(y, label, copy=True)
+        mc = masked.count(axis=0).T[0]
+        label_count.append(mc)
+
+    x = range(1, len(label_count[0]) + 1)
+    y = label_count
+
+    y_ = np.reshape(y, newshape=(len(labels), -1))
+
+    fig, ax = plt.subplots()
+    ax.stackplot(x, y, labels=lbs, colors=pal, edgecolor="black", alpha = 0.5)
+    ax.set_xlim(1, X.shape[1])
+    ax.set_ylim(0, y_[:, 0].sum())
+    ax.legend(loc="lower right")
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Cumulative frame count")
+    plt.tight_layout()
+    return fig, ax
