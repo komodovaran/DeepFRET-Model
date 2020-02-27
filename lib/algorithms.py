@@ -499,7 +499,7 @@ def generate_traces(
                 return pd.DataFrame()
 
         if label[0] in [4, 5, 6, 7, 8]:
-            min_diff = np.min(np.diff(state_means))
+            min_diff = np.min(np.diff(np.unique(E_unbleached_true)))
         else:
             min_diff = np.nan
 

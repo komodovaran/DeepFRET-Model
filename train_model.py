@@ -32,6 +32,7 @@ def main(
     batch_size,
     model_function,
     use_fret_for_training,
+    exclude_alex_fret,
 ):
 
     if new_model:
@@ -67,7 +68,7 @@ def main(
         X = np.expand_dims(X[..., 4], axis=-1)
         X = X.clip(2, -2)
     else:
-        X = X[..., 0:3]
+        X = X[...,0:2] if exclude_alex_fret else X[...,0:3]
         X = lib.utils.sample_max_normalize_3d(X)
 
     print("X: ", X.shape)
@@ -158,8 +159,9 @@ if __name__ == "__main__":
         tag="experimental",
         percent_of_data=100,
         batch_size=32,
-        epochs=1,
+        epochs=100,
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,
+        exclude_alex_fret = True
     )
