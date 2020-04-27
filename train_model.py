@@ -6,8 +6,9 @@ import numpy as np
 import sklearn.model_selection
 import tensorflow as tf
 
-google_colab = "google.colab" in sys.modules
-if google_colab:
+running_on_google_colab = "google.colab" in sys.modules
+if running_on_google_colab:
+    # Must come before custom lib imports
     sys.path.append("./gdrive/My Drive/Colab Notebooks/DeepFRET-Model")
     plt.style.use("default")
 
@@ -35,6 +36,8 @@ def main(
     use_fret_for_training,
     exclude_alex_fret,
 ):
+
+    gpu_available = tf.test.is_gpu_available()
 
     if new_model:
         print("**Training new model**")
@@ -69,7 +72,7 @@ def main(
         X = np.expand_dims(X[..., 4], axis=-1)
         X = X.clip(2, -2)
     else:
-        X = X[...,0:2] if exclude_alex_fret else X[...,0:3]
+        X = X[..., 0:2] if exclude_alex_fret else X[..., 0:3]
         X = lib.utils.sample_max_normalize_3d(X)
 
     print("X: ", X.shape)
@@ -84,12 +87,12 @@ def main(
 
     model = lib.model.get_model(
         n_features=X.shape[-1],
-        n_classes = n_classes,
+        n_classes=n_classes,
         train=train,
         new_model=new_model,
         model_name=model_name,
         model_path=outdir,
-        google_colab=running_on_google_colab,
+        gpu=gpu_available,
         tag=tag,
         regression=regression,
         model_function=model_function,
@@ -117,15 +120,15 @@ def main(
             )
         except IndexError:
             pass
-            
+
         # Convert final model to GPU
-        if tf.test.is_gpu_available():
+        if gpu_available:
             print("Converted model from GPU to CPU-compatible")
             cpu_model = model_function(
-                google_colab=False,
+                gpu=False,
                 n_features=X.shape[-1],
                 regression=regression,
-                n_classes = n_classes
+                n_classes=n_classes,
             )
             lib.ml.gpu_model_to_cpu(
                 trained_gpu_model=model,
@@ -152,7 +155,7 @@ if __name__ == "__main__":
     # In order to run this on Google Colab, everything must be placed
     # according to "~/Google Drive/Colab Notebooks/DeepFRET/"
     main(
-        running_on_google_colab=google_colab,
+        running_on_google_colab=running_on_google_colab,
         regression=False,
         train=True,
         new_model=True,
@@ -167,5 +170,5 @@ if __name__ == "__main__":
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,
-        exclude_alex_fret = False
+        exclude_alex_fret=False,
     )

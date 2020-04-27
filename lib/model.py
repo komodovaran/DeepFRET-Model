@@ -66,8 +66,8 @@ class ResidualConv1D:
         return self.build(x)
 
 
-def create_lstm_model(google_colab, n_features, regression):
-    LSTM_ = CuDNNLSTM if google_colab else LSTM
+def create_lstm_model(gpu, n_features, regression):
+    LSTM_ = CuDNNLSTM if gpu else LSTM
 
     inputs = Input(shape=(None, n_features))
 
@@ -89,12 +89,12 @@ def create_lstm_model(google_colab, n_features, regression):
     return model
 
 
-def create_deepconvlstm_model(google_colab, n_features, n_classes, regression):
+def create_deepconvlstm_model(gpu, n_features, n_classes, regression):
     """
     Creates Keras model that resulted in the best performing classifier so far
     """
 
-    LSTM_ = CuDNNLSTM if google_colab else LSTM
+    LSTM_ = CuDNNLSTM if gpu else LSTM
 
     inputs = Input(shape=(None, n_features))
 
@@ -151,7 +151,7 @@ def get_model(
     model_name,
     model_path,
     model_function,
-    google_colab,
+    gpu,
     regression,
     print_summary=True,
     tag=None,
@@ -161,7 +161,7 @@ def get_model(
         if new_model:
             print("Created new model.")
             model = model_function(
-                google_colab=google_colab,
+                gpu=gpu,
                 n_features=n_features,
                 n_classes = n_classes,
                 regression=regression,
@@ -178,7 +178,7 @@ def get_model(
             except OSError:
                 print("No model found. Created new model.")
                 model = model_function(
-                    google_colab=google_colab,
+                    gpu=gpu,
                     n_features=n_features,
                     n_classes = n_classes,
                     regression=regression,
