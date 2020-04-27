@@ -4,6 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.model_selection
+import tensorflow as tf
+
 
 google_colab = "google.colab" in sys.modules
 if google_colab:
@@ -118,7 +120,7 @@ def main(
             pass
             
         # Convert final model to GPU
-        if running_on_google_colab:
+        if tf.test.is_gpu_available():
             print("Converted model from GPU to CPU-compatible")
             cpu_model = model_function(
                 google_colab=False,
@@ -161,7 +163,7 @@ if __name__ == "__main__":
         tag="experimental",
         percent_of_data=100,
         batch_size=32,
-        epochs=100,
+        epochs=1,
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,
