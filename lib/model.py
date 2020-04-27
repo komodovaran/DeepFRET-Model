@@ -1,23 +1,7 @@
 from tensorflow import keras
-from tensorflow.python.keras import backend as K
-from tensorflow_core.python.keras import Input
-from tensorflow_core.python.keras.layers import (
-    Activation,
-    Bidirectional,
-    Conv1D,
-    CuDNNLSTM,
-    Dense,
-    Dropout,
-    Lambda,
-    MaxPooling1D,
-    RepeatVector,
-    TimeDistributed,
-    add,
-)
-from tensorflow_core.python.keras.layers.normalization_v2 import (
-    BatchNormalization,
-)
-from tensorflow_core.python.keras.layers.recurrent_v2 import LSTM
+from tensorflow.python.keras import Input, backend as K
+from tensorflow.python.keras.layers import (Activation, BatchNormalization, Bidirectional, Conv1D, CuDNNLSTM, Dense,
+                                            Dropout, LSTM, Lambda, MaxPooling1D, TimeDistributed, add)
 
 
 class VariableRepeatVector:
@@ -105,7 +89,7 @@ def create_lstm_model(google_colab, n_features, regression):
     return model
 
 
-def create_deepconvlstm_model(google_colab, n_features, regression):
+def create_deepconvlstm_model(google_colab, n_features, n_classes, regression):
     """
     Creates Keras model that resulted in the best performing classifier so far
     """
@@ -151,47 +135,17 @@ def create_deepconvlstm_model(google_colab, n_features, regression):
         metric = "mse"
         loss = "mse"
     else:
-        outputs = Dense(9, activation="softmax")(x)
+        outputs = Dense(n_classes, activation="softmax")(x)
         metric = "accuracy"
         loss = "categorical_crossentropy"
 
     model = keras.models.Model(inputs=inputs, outputs=outputs)
     model.compile(loss=loss, optimizer="adam", metrics=[metric])
     return model
-
-
-def create_autoencoder(google_colab, n_features, regression):
-    units = 128
-
-    LSTM_ = CuDNNLSTM if google_colab else LSTM
-
-    inputs = Input(shape=(None, n_features))
-    x = Bidirectional(LSTM_(units, return_sequences=False))(inputs)
-    x = Dense(8)(x)
-    x = Activation("relu")(x)
-    x = VariableRepeatVector()([inputs, x])
-    x = Bidirectional(LSTM_(units, return_sequences=True))(x)
-
-    if regression:
-        x = TimeDistributed(Dense(1))(x)
-        outputs = Activation(None)(x)
-
-        metric = "mse"
-        loss = "mse"
-    else:
-        x = TimeDistributed(Dense(6))(x)
-        outputs = Activation("softmax")(x)
-
-        metric = "accuracy"
-        loss = "categorical_crossentropy"
-
-    model = keras.models.Model(inputs=inputs, outputs=outputs)
-    model.compile(loss=loss, optimizer="adam", metrics=[metric])
-    return model
-
 
 def get_model(
     n_features,
+    n_classes,
     train,
     new_model,
     model_name,
@@ -209,6 +163,7 @@ def get_model(
             model = model_function(
                 google_colab=google_colab,
                 n_features=n_features,
+                n_classes = n_classes,
                 regression=regression,
             )
         else:
@@ -225,6 +180,7 @@ def get_model(
                 model = model_function(
                     google_colab=google_colab,
                     n_features=n_features,
+                    n_classes = n_classes,
                     regression=regression,
                 )
     else:

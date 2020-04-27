@@ -53,12 +53,12 @@ def main(
         path=datadir,
         set_names=("X_" + dataname, "y_" + dataname),
     )
+    n_classes = len(np.unique(labels))
 
     if not regression:
         # Use labels as classification target
-        set_y = set(labels.ravel())
-        y = lib.ml.class_to_one_hot(labels, num_classes=len(set_y))
-        y = lib.ml.smoothe_one_hot_labels(y, amount=0.1)
+        y = lib.ml.class_to_one_hot(labels, num_classes=n_classes)
+        y = lib.ml.smoothe_one_hot_labels(y, amount=0.05)
     else:
         # Use E_true column as regression target
         y = np.expand_dims(X[..., 3], axis=-1)
@@ -83,6 +83,7 @@ def main(
 
     model = lib.model.get_model(
         n_features=X.shape[-1],
+        n_classes = n_classes,
         train=train,
         new_model=new_model,
         model_name=model_name,
@@ -115,7 +116,8 @@ def main(
             )
         except IndexError:
             pass
-
+            
+        # Convert final model to GPU
         if running_on_google_colab:
             print("Converted model from GPU to CPU-compatible")
             cpu_model = model_function(
@@ -163,5 +165,5 @@ if __name__ == "__main__":
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,
-        exclude_alex_fret = True
+        exclude_alex_fret = False
     )

@@ -7,9 +7,11 @@ import lib.ml
 import lib.utils
 import lib.plotting
 import matplotlib.pyplot as plt
+from time import time
+from lib.ml import _merge_hmm_labels
 
 
-def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
+def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_classes, outdir):
     """
 
     Parameters
@@ -18,6 +20,9 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         Number of traces to generate
     n_timesteps:
         Length of each trace
+    merge_hmm_labels:
+        Whether to merge all HMM states above 2 into "dynamic", as the HMM
+        predictions don't work so well yet
     labels_to_binary:
         Whether to convert all labels to smFRET/not-smFRET (for each frame)
     balance_classes:
@@ -27,7 +32,8 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         Output directory
     """
     print("Generating traces...")
-    df = lib.algorithms.generate_traces(
+    start = time()
+    df, m = lib.algorithms.generate_traces(
         n_traces=int(n_traces),
         aa_mismatch=(-0.35, 0.35),
         state_means="random",
@@ -39,10 +45,11 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         trans_prob=(0.0, 0.20),
         blink_prob=0.2,
         bleed_through=(0, 0.15),
-        noise=(0.01, 0.26),
+        noise=(0.01, 0.30),
         acceptable_noise=0.25,
         D_lifetime=500,
         A_lifetime=500,
+        scramble_decouple_prob = 0.9,
         falloff_lifetime=500,
         falloff_prob=0.1,
         scramble_prob=0.15,
@@ -50,9 +57,13 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         au_scaling_factor=(1),
         null_fret_value=-1,
         discard_unbleached=False,
+        run_headless_parallel = True,
+        return_matrix = True
     )
+    stop = time()
+    print("spent {:.2f} s to generate".format((stop - start)))
 
-    X = df[["DD", "DA", "AA", "E", "E_true"]].values
+    X = df[["D-Dexc-rw", "A-Dexc-rw", "A-Aexc-rw", "E", "E_true"]].values
 
     if np.any(X == -1):
         print(
@@ -61,6 +72,8 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
         )
 
     labels = df["label"].values
+    if merge_hmm_labels:
+        labels = _merge_hmm_labels(labels)
 
     X, labels = lib.ml.preprocess_2d_timeseries_seq2seq(
         X=X, y=labels, n_timesteps=n_timesteps
@@ -69,7 +82,7 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
     ext = False
 
     if labels_to_binary:
-        labels = lib.ml.labels_to_binary(labels, one_hot=False, to_ones=(2, 3))
+        labels = lib.ml.labels_to_binary(labels, one_hot=False, to_ones=(4, 5, 6, 7, 8))
         ext = "_binary"
         print("After binarize ", set(labels.ravel()))
 
@@ -97,9 +110,10 @@ def main(n_traces, n_timesteps, labels_to_binary, balance_classes, outdir):
 
 if __name__ == "__main__":
     main(
-        n_traces=150000,
+        n_traces=10000,
         n_timesteps=300,
-        balance_classes=False,
+        merge_hmm_labels = True,
+        balance_classes=True,
         labels_to_binary=False,
         outdir="./data",
     )

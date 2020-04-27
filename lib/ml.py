@@ -89,10 +89,10 @@ def balance_classes(X, y, frame=0, exclude_label_from_limiting=0, shuffle=True):
     balanced_X = []
     balanced_y = []
     for n in range(len(X)):
-        xi = X[n, :, :]
         yi = y[n, :, :]
         li = np.int(yi[frame])
         if scores[li] < limiting:
+            xi = X[n, :, :]
             balanced_X.append(xi)
             balanced_y.append(yi)
             scores[li] += 1
@@ -143,21 +143,21 @@ def generate_callbacks(
     ]
 
 
-def seq_probabilities(yi, skip_threshold=0.5, skip_column=0):
+def seq_probabilities(yi, target_values, bleach_skip_threshold=0.5, skip_column=0):
     """
     Calculates class-wise probabilities over the entire trace for a one-hot encoded
     sequence prediction. Skips values where the first value is above threshold (bleaching)
     """
     assert len(yi.shape) == 2
 
-    p = yi[yi[:, skip_column] < skip_threshold]  # Discard rows above threshold
+    p = yi[yi[:, skip_column] < bleach_skip_threshold]  # Discard rows above threshold
     if len(p) > 0:
         p = p.sum(axis=0) / len(p)  # Sum rows for each class
         p = p / p.sum()  # Normalize probabilities to 1
         # p[skip_column] = 0
     else:
         p = np.zeros(yi.shape[1])
-    confidence = p[[2, 3]].sum()
+    confidence = p[target_values].sum()
     return p, confidence
 
 
@@ -171,3 +171,12 @@ def find_bleach(p_bleach, threshold=0.5, window=7):
     if bleach_frame == 0:
         bleach_frame = None
     return bleach_frame
+
+
+def _merge_hmm_labels(arr):
+    """
+    All labels at 5 or above are re-labelled to "dynamic" instead of n-states,
+    because the HMM prediction doesn't work so well
+    """
+    arr[arr > 5] = 5
+    return arr
