@@ -6,7 +6,6 @@ import numpy as np
 import sklearn.model_selection
 import tensorflow as tf
 
-
 google_colab = "google.colab" in sys.modules
 if google_colab:
     sys.path.append("./gdrive/My Drive/Colab Notebooks/DeepFRET-Model")

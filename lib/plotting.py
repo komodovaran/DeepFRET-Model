@@ -57,7 +57,7 @@ def _swap_y_labels(*y):
 
 def plot_losses(logpath, outdir, name, show_only=False):
     """Plots training and validation loss"""
-    stats = pd.read_csv(os.path.join(logpath, name + "_training.log")).values
+    stats = pd.read_csv(os.path.join(str(logpath), name + "_training.log")).values
     fig, axes = plt.subplots(ncols=2, figsize=(8, 4))
     axes = axes.ravel()
 
@@ -96,7 +96,7 @@ def plot_losses(logpath, outdir, name, show_only=False):
     if show_only:
         plt.show()
     else:
-        plt.savefig(os.path.join(outdir, name + "_loss.pdf"))
+        plt.savefig(os.path.join(str(outdir), name + "_loss.pdf"))
         plt.close()
 
 
@@ -240,7 +240,7 @@ def plot_predictions(
 
     if outdir is not None:
         plt.tight_layout()
-        plt.savefig(os.path.join(outdir, name + ".pdf"))
+        plt.savefig(os.path.join(str(outdir), name + ".pdf"))
         plt.close()
 
 
@@ -276,7 +276,7 @@ def plot_confusion_matrices(
         ax.set_yticklabels(l)
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
-        plt.savefig(os.path.join(outdir, name + "_binary_confusion_matrix.pdf"))
+        plt.savefig(os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf"))
         plt.close()
     else:
         y_target, y_pred = _swap_y_labels(
@@ -307,7 +307,7 @@ def plot_confusion_matrices(
         ax.set_yticklabels(l)
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
-        plt.savefig(os.path.join(outdir, name + "_confusion_matrix.pdf"))
+        plt.savefig(os.path.join(str(outdir), name + "_confusion_matrix.pdf"))
         plt.close()
 
         if (
@@ -332,7 +332,7 @@ def plot_confusion_matrices(
             ax.set_xticklabels(l, rotation=90)
             plt.tight_layout()
             plt.savefig(
-                os.path.join(outdir, name + "_binary_confusion_matrix.pdf")
+                os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf")
             )
             plt.close()
 
@@ -604,7 +604,7 @@ def plot_trace_and_preds(
 
     if outdir is not None:
         plt.suptitle(tracename)
-        path = os.path.expanduser(os.path.join(outdir, str(tracename) + ".pdf"))
+        path = os.path.expanduser(os.path.join(str(outdir), str(tracename) + ".pdf"))
         plt.savefig(path)
         plt.close()
     else:
