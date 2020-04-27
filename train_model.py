@@ -125,6 +125,7 @@ def main(
                 google_colab=False,
                 n_features=X.shape[-1],
                 regression=regression,
+                n_classes = n_classes
             )
             lib.ml.gpu_model_to_cpu(
                 trained_gpu_model=model,
