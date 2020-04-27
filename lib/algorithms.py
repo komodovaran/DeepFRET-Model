@@ -622,7 +622,7 @@ def generate_traces(
                 ),
             }
         )
-        trace.replace([np.inf, -np.inf], np.nan, inplace=True)
+        trace.replace([np.inf, -np.inf, np.nan], -1, inplace=True)
         trace.fillna(method="pad", inplace=True)
         pbar.update()
 

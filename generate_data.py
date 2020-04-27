@@ -37,9 +37,10 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
         n_traces=int(n_traces),
         aa_mismatch=(-0.35, 0.35),
         state_means="random",
-        random_k_states_max=5,
+        random_k_states_max=4,
         min_state_diff=0.1,
         aggregation_prob=0.15,
+        scramble_prob=0.15,
         max_aggregate_size=20,
         trace_length=n_timesteps,
         trans_prob=(0.0, 0.20),
@@ -52,7 +53,6 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
         scramble_decouple_prob = 0.9,
         falloff_lifetime=500,
         falloff_prob=0.1,
-        scramble_prob=0.15,
         gamma_noise_prob=0.8,
         au_scaling_factor=(1),
         null_fret_value=-1,
@@ -94,7 +94,8 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
 
     lib.plotting.plot_trace_label_distribution(X=X, y=labels)
 
-    assert not np.any(np.isnan(X))
+    if np.any(np.isnan(X)):
+        raise ValueError
 
     for obj, name in zip((X, labels), ("X_sim", "y_sim")):
         if ext:
@@ -110,7 +111,7 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
 
 if __name__ == "__main__":
     main(
-        n_traces=10000,
+        n_traces=int(input("Initial number of traces to generate (will be balanced): ")),
         n_timesteps=300,
         merge_hmm_labels = True,
         balance_classes=True,
