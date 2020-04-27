@@ -66,7 +66,7 @@ def count_adjacent_values(arr):
 def load_npz_data(path, set_names=("X", "y"), top_percentage=100):
     """Loads .npy formatted simulated data"""
     sets = [
-        np.load(os.path.join(path, file + ".npz"))["arr_0"]
+        np.load(os.path.join(str(path), file + ".npz"))["arr_0"]
         for file in set_names
     ]
     fraction = int(1 / (top_percentage * 0.01))
