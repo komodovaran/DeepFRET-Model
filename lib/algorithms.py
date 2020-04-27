@@ -9,7 +9,8 @@ import lib.utils
 from lib.utils import global_function
 import warnings
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
+
 
 def generate_traces(
     n_traces,
@@ -42,6 +43,7 @@ def generate_traces(
     return_matrix=False,
     run_headless_parallel=True,
     scramble_decouple_prob=0.9,
+    reduce_memory=True,
 ):
     """
     Parameters
@@ -130,6 +132,9 @@ def generate_traces(
     scramble_decouple_prob:
         Probability for de-coupling fluorophores so that they aren't FRETing,
         if trace is "scrambled".
+    reduce_memory:
+        Reduces memory consumption of dataframe by keeping only intensities
+        and labels
     """
     eps = 1e-16
 
@@ -600,28 +605,41 @@ def generate_traces(
 
         # Columns pre-fixed with underscore contain metadata, and only the
         # first value should be used (repeated because table structure)
-        trace = pd.DataFrame(
-            {
-                "D-Dexc-rw": DD,
-                "A-Dexc-rw": DA,
-                "A-Aexc-rw": AA,
-                "D-Dexc-bg": bg,
-                "A-Dexc-bg": bg,
-                "A-Aexc-bg": bg,
-                "E": E_obs,
-                "E_true": E_true,
-                "S": S_obs,
-                "frame": frames,
-                "name": name,
-                "label": label,
-                "_bleaches_at": np.array(first_bleach_all).repeat(trace_length),
-                "_noise_level": np.array(noise).repeat(trace_length),
-                "_min_state_diff": np.array(min_diff).repeat(trace_length),
-                "_max_n_classes": np.array(len(classifications.keys())).repeat(
-                    trace_length
-                ),
-            }
-        )
+        if reduce_memory:
+            trace = pd.DataFrame(
+                {
+                    "D-Dexc-rw": DD,
+                    "A-Dexc-rw": DA,
+                    "A-Aexc-rw": AA,
+                    "name": name,
+                    "label": label,
+                }
+            )
+        else:
+            trace = pd.DataFrame(
+                {
+                    "D-Dexc-rw": DD,
+                    "A-Dexc-rw": DA,
+                    "A-Aexc-rw": AA,
+                    "D-Dexc-bg": bg,
+                    "A-Dexc-bg": bg,
+                    "A-Aexc-bg": bg,
+                    "E": E_obs,
+                    "E_true": E_true,
+                    "S": S_obs,
+                    "frame": frames,
+                    "name": name,
+                    "label": label,
+                    "_bleaches_at": np.array(first_bleach_all).repeat(
+                        trace_length
+                    ),
+                    "_noise_level": np.array(noise).repeat(trace_length),
+                    "_min_state_diff": np.array(min_diff).repeat(trace_length),
+                    "_max_n_classes": np.array(
+                        len(classifications.keys())
+                    ).repeat(trace_length),
+                }
+            )
         trace.replace([np.inf, -np.inf, np.nan], -1, inplace=True)
         trace.fillna(method="pad", inplace=True)
         pbar.update()
@@ -630,7 +648,7 @@ def generate_traces(
 
     processes = range(n_traces)
     n_processes = 8 if run_headless_parallel else 1
-    pbar = tqdm(total=(n_traces / n_processes) * 2, smoothing=1)
+    pbar = tqdm(total=(n_traces / n_processes) * 2, smoothing=0)
 
     if run_headless_parallel:
         traces_matrices = parmap.map(
@@ -667,7 +685,9 @@ def generate_traces(
             if progressbar_callback is not None and (i % callback_every) == 0:
                 progressbar_callback.increment()
 
-    traces = pd.concat(traces) if len(traces) > 1 else traces[0]
+    traces = (
+        pd.concat(traces, ignore_index=True, copy = False, sort = False) if len(traces) > 1 else traces[0]
+    )
     matrices = np.array(matrices)
     pbar.close()
 

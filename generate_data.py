@@ -11,7 +11,7 @@ from time import time
 from lib.ml import _merge_hmm_labels
 
 
-def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_classes, outdir):
+def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_classes, outdir, reduce_memory):
     """
 
     Parameters
@@ -33,7 +33,7 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
     """
     print("Generating traces...")
     start = time()
-    df, m = lib.algorithms.generate_traces(
+    X = lib.algorithms.generate_traces(
         n_traces=int(n_traces),
         aa_mismatch=(-0.35, 0.35),
         state_means="random",
@@ -58,12 +58,18 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
         null_fret_value=-1,
         discard_unbleached=False,
         run_headless_parallel = True,
-        return_matrix = True
+        return_matrix = False,
+        reduce_memory = True,
     )
     stop = time()
     print("spent {:.2f} s to generate".format((stop - start)))
 
-    X = df[["D-Dexc-rw", "A-Dexc-rw", "A-Aexc-rw", "E", "E_true"]].values
+    labels = X["label"].values
+
+    if reduce_memory:
+        X = X[["D-Dexc-rw", "A-Dexc-rw", "A-Aexc-rw"]].values
+    else:
+        X = X[["D-Dexc-rw", "A-Dexc-rw", "A-Aexc-rw", "E", "E_true"]].values
 
     if np.any(X == -1):
         print(
@@ -71,7 +77,6 @@ def main(n_traces, n_timesteps, merge_hmm_labels, labels_to_binary, balance_clas
             "for regression!"
         )
 
-    labels = df["label"].values
     if merge_hmm_labels:
         labels = _merge_hmm_labels(labels)
 
@@ -116,5 +121,6 @@ if __name__ == "__main__":
         merge_hmm_labels = True,
         balance_classes=True,
         labels_to_binary=False,
+        reduce_memory = True,
         outdir="./data",
     )
