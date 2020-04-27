@@ -48,11 +48,11 @@ def gpu_model_to_cpu(trained_gpu_model, untrained_cpu_model, outdir, modelname):
     Loads a keras GPU model and saves it as a CPU-compatible model.
     The models must be exactly alike.
     """
-    weights = os.path.join(outdir, "weights_temp.h5")
+    weights = os.path.join(str(outdir), "weights_temp.h5")
     trained_gpu_model.save_weights(weights)
     untrained_cpu_model.load_weights(weights)
     keras.models.save_model(
-        untrained_cpu_model, os.path.join(outdir, modelname)
+        untrained_cpu_model, os.path.join(str(outdir), modelname)
     )
     try:
         send2trash(weights)
@@ -111,17 +111,17 @@ def generate_callbacks(
     )
 
     log = keras.callbacks.CSVLogger(
-        filename=os.path.join(outdir, name + "_training.log"), append=False
+        filename=os.path.join(str(outdir), name + "_training.log"), append=False
     )
     early_stopping = keras.callbacks.EarlyStopping(
         patience=patience, monitor=monitor, verbose=verbose, mode=mode
     )
 
     model_checkpoint = keras.callbacks.ModelCheckpoint(
-        os.path.join(outdir, name + "_best_model.h5"), **checkpoint_params
+        os.path.join(str(outdir), name + "_best_model.h5"), **checkpoint_params
     )
     weight_checkpoint = keras.callbacks.ModelCheckpoint(
-        os.path.join(outdir, name + "_best_model_weights.h5"),
+        os.path.join(str(outdir), name + "_best_model_weights.h5"),
         save_weights_only=True,
         **checkpoint_params
     )
