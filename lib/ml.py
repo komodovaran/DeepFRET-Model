@@ -171,12 +171,3 @@ def find_bleach(p_bleach, threshold=0.5, window=7):
     if bleach_frame == 0:
         bleach_frame = None
     return bleach_frame
-
-
-def _merge_hmm_labels(arr):
-    """
-    All labels at 5 or above are re-labelled to "dynamic" instead of n-states,
-    because the HMM prediction doesn't work so well
-    """
-    arr[arr > 5] = 5
-    return arr

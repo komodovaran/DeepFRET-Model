@@ -15,26 +15,26 @@ warnings.filterwarnings("ignore")
 def generate_traces(
     n_traces,
     state_means="random",
-    random_k_states_max=5,
+    random_k_states_max=4,
     min_state_diff=0.1,
-    D_lifetime=400,
-    A_lifetime=200,
-    blink_prob=0.05,
-    bleed_through=0,
-    aa_mismatch=(-0.3, 0.3),
-    trace_length=200,
-    trans_prob=0.1,
-    noise=0.08,
+    D_lifetime=500,
+    A_lifetime=500,
+    blink_prob=0.2,
+    bleed_through=(0, 0.15),
+    aa_mismatch=(-0.35, 0.35),
+    trace_length=300,
+    trans_prob=(0.0, 0.20),
+    noise=(0.01, 0.30),
     trans_mat=None,
     au_scaling_factor=1,
-    aggregation_prob=0.1,
-    max_aggregate_size=100,
+    aggregation_prob=0.15,
+    max_aggregate_size=20,
     null_fret_value=-1,
     acceptable_noise=0.25,
     S_range=(0.3, 0.7),
-    scramble_prob=0.3,
-    gamma_noise_prob=0.5,
-    falloff_lifetime=200,
+    scramble_prob=0.15,
+    gamma_noise_prob=0.8,
+    falloff_lifetime=500,
     falloff_prob=0.1,
     merge_labels=False,
     discard_unbleached=False,
@@ -44,6 +44,7 @@ def generate_traces(
     run_headless_parallel=True,
     scramble_decouple_prob=0.9,
     reduce_memory=True,
+    merge_state_labels = True,
 ):
     """
     Parameters
@@ -135,6 +136,9 @@ def generate_traces(
     reduce_memory:
         Reduces memory consumption of dataframe by keeping only intensities
         and labels
+    merge_state_labels:
+        Sets state labels to either 'static' or 'dynamic', instead of n-states.
+        All labels above 5 (for more states) are thus set to 5
     """
     eps = 1e-16
 
@@ -686,10 +690,17 @@ def generate_traces(
                 progressbar_callback.increment()
 
     traces = (
-        pd.concat(traces, ignore_index=True, copy = False, sort = False) if len(traces) > 1 else traces[0]
+        pd.concat(traces, ignore_index=True, copy=False, sort=False)
+        if len(traces) > 1
+        else traces[0]
     )
     matrices = np.array(matrices)
     pbar.close()
+
+    if merge_state_labels:
+        # 2, 3, 4, 5 states will all have the same label,
+        # considered "dynamic"
+        traces[traces["label"] > 5] = 5
 
     if return_matrix:
         return traces, matrices

@@ -35,29 +35,11 @@ merge_cols = [5, 6, 7, 8]
 keep_cols = [0, 1, 2, 3, 4]
 
 
-def _swap_y_labels(*y):
-    """
-    Swaps the labels accordingly:
-
-    0: bleached        0: bleached
-    1: aggregate       1: aggregate
-    2: dynamic         4: noisy
-    3: static          5: scrambled
-    4: noisy           3: static
-    5: scrambled       2: dynamic
-
-    Inputs must be argmaxed and unraveled
-    """
-    ys = y
-    ys = [lib.utils.swap_integers(y, 5, 2) for y in ys]
-    ys = [lib.utils.swap_integers(y, 3, 4) for y in ys]
-    ys = [lib.utils.swap_integers(y, 4, 5) for y in ys]
-    return ys
-
-
 def plot_losses(logpath, outdir, name, show_only=False):
     """Plots training and validation loss"""
-    stats = pd.read_csv(os.path.join(str(logpath), name + "_training.log")).values
+    stats = pd.read_csv(
+        os.path.join(str(logpath), name + "_training.log")
+    ).values
     fig, axes = plt.subplots(ncols=2, figsize=(8, 4))
     axes = axes.ravel()
 
@@ -247,8 +229,8 @@ def plot_predictions(
 def plot_confusion_matrices(
     y_target,
     y_pred,
-    name,
-    outdir,
+    name="",
+    outdir=None,
     targets_to_binary=None,
     y_is_binary=False,
     ticks_binary=None,
@@ -260,55 +242,45 @@ def plot_confusion_matrices(
     *Very* hard-coded section, so make sure 0, 1, 2,.. labels match the strings!
     """
     axis = 2 if len(y_target.shape) == 3 else 1
-    mkwargs = dict(show_normed=True, show_absolute=show_abs, colorbar=False)
+    mkwargs = dict(show_normed=True, show_absolute=show_abs, colorbar=True)
 
     if y_is_binary:
         matrix = mlxtend.evaluate.confusion_matrix(
             y_target=y_target.argmax(axis=axis).ravel(),
             y_predicted=y_pred.argmax(axis=axis).ravel(),
         )
+
         fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
         l = (
             ticks_binary
             if ticks_binary is not None
-            else ["", "non-usable", "usable"]
+            else [""] + list(labels_binary)
         )
         ax.set_yticklabels(l)
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
-        plt.savefig(os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf"))
-        plt.close()
+        if outdir is not None:
+            plt.savefig(
+                os.path.join(outdir, name + "_binary_confusion_matrix.pdf")
+            )
+            plt.close()
     else:
-        y_target, y_pred = _swap_y_labels(
-            *[y.argmax(axis=axis).ravel() for y in (y_target, y_pred)]
-        )
+        y_target, y_pred = [
+            y.argmax(axis=axis).ravel() for y in (y_target, y_pred)
+        ]
 
         matrix = mlxtend.evaluate.confusion_matrix(
             y_target=y_target, y_predicted=y_pred
         )
 
-        if ticks_multi is not None:
-            l = ticks_multi
-        else:
-            l = [
-                "",
-                "bleached",
-                "aggregate",
-                "noisy",
-                "scramble",
-                "1-state",
-                "2-state",
-                "3-state",
-                "4-state",
-                "5-state",
-            ]
-
+        l = ticks_multi if ticks_multi is not None else [""] + list(labels_full)
         fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
         ax.set_yticklabels(l)
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
-        plt.savefig(os.path.join(str(outdir), name + "_confusion_matrix.pdf"))
-        plt.close()
+        if outdir is not None:
+            plt.savefig(os.path.join(outdir, name + "_confusion_matrix.pdf"))
+            plt.close()
 
         if (
             targets_to_binary is not None
@@ -319,22 +291,24 @@ def plot_confusion_matrices(
                 ).ravel()
                 for y in (y_target, y_pred)
             ]
+
             matrix = mlxtend.evaluate.confusion_matrix(
                 y_target=y_target_b, y_predicted=y_pred_b
             )
             l = (
                 ticks_binary
                 if ticks_binary is not None
-                else ["", "non-usable", "usable"]
+                else [""] + list(labels_binary)
             )
             fig, ax = _plot_confusion_matrix_mlxtend(matrix, **mkwargs)
             ax.set_yticklabels(l)
             ax.set_xticklabels(l, rotation=90)
             plt.tight_layout()
-            plt.savefig(
-                os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf")
-            )
-            plt.close()
+            if outdir is not None:
+                plt.savefig(
+                    os.path.join(outdir, name + "_binary_confusion_matrix.pdf")
+                )
+                plt.close()
 
 
 def plot_category(y, ax, colors=None, alpha=0.2):
@@ -533,8 +507,8 @@ def plot_trace_and_preds(
     tracename,
     target_values,
     smfret_axes,
-    detect_bleach = True,
-    clrs = None,
+    detect_bleach=True,
+    clrs=None,
     outdir=None,
     binary=False,
     y_line=False,
@@ -598,13 +572,19 @@ def plot_trace_and_preds(
 
     if y_shade:
         if shade_as_groundtruth:
-            lib.plotting.plot_category(y=yi_true, ax=smfret_axes[-1], alpha=0.4, colors = clrs)
+            lib.plotting.plot_category(
+                y=yi_true, ax=smfret_axes[-1], alpha=0.4, colors=clrs
+            )
         else:
-            lib.plotting.plot_category(y=yi, ax=smfret_axes[-1], alpha=0.4, colors = clrs)
+            lib.plotting.plot_category(
+                y=yi, ax=smfret_axes[-1], alpha=0.4, colors=clrs
+            )
 
     if outdir is not None:
         plt.suptitle(tracename)
-        path = os.path.expanduser(os.path.join(str(outdir), str(tracename) + ".pdf"))
+        path = os.path.expanduser(
+            os.path.join(str(outdir), str(tracename) + ".pdf")
+        )
         plt.savefig(path)
         plt.close()
     else:
