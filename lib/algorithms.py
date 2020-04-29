@@ -44,7 +44,7 @@ def generate_traces(
     run_headless_parallel=True,
     scramble_decouple_prob=0.9,
     reduce_memory=True,
-    merge_state_labels = True,
+    merge_state_labels=True,
 ):
     """
     Parameters
@@ -369,10 +369,6 @@ def generate_traces(
         DD_total, DA_total, AA_total = [], [], []
         first_bleach_all = []
 
-        is_decoupled = (
-            True if np.random.uniform(0, 1) < scramble_decouple_prob else False
-        )
-
         for j in range(n_pairs):
             np.random.seed()
             if D_lifetime is not None:
@@ -507,6 +503,11 @@ def generate_traces(
         # effect otherwise)
         is_scrambled = False
         if np.random.uniform(0, 1) < scramble_prob and n_pairs <= 2:
+            is_decoupled = (
+                True
+                if np.random.uniform(0, 1) < scramble_decouple_prob
+                else False
+            )
             DD, DA, AA, label = scramble(
                 DD=DD,
                 DA=DA,
@@ -582,7 +583,7 @@ def generate_traces(
                     ] = classifications["{}-state".format(k_states)]
 
         # Bad traces don't contain FRET
-        if any((is_noisy, is_decoupled, is_aggregated, is_scrambled)):
+        if any((is_noisy, is_aggregated, is_scrambled)):
             E_true.fill(-1)
 
         # Ensure that any bad stoichiometry values are correctly set to bleached
