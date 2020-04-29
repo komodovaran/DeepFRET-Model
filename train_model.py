@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.model_selection
 import tensorflow as tf
+import argparse
 
 running_on_google_colab = "google.colab" in sys.modules
 if running_on_google_colab:
@@ -17,6 +18,16 @@ import lib.plotting
 import lib.ml
 import lib.utils
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-n", "--name", help="Name of model output", required=True)
+parser.add_argument(
+    "-e",
+    "--exclude-alex",
+    help="Whether to exclude ALEX from training data",
+    required=False,
+    default=False,
+)
+args = vars(parser.parse_args())
 
 def main(
     running_on_google_colab,
@@ -102,6 +113,8 @@ def main(
         dataname += "_" + tag
         model_name = model_name.replace("best_model", tag + "_best_model")
 
+    print(dataname)
+    quit()
     if train:
         callbacks = lib.ml.generate_callbacks(
             patience=callback_timeout, outdir=outdir, name=dataname
@@ -163,12 +176,12 @@ if __name__ == "__main__":
         datadir="data",
         outdir="output",
         dataname="sim",
-        tag="experimental",
+        tag=args["name"],
         percent_of_data=100,
         batch_size=32,
         epochs=100,
         callback_timeout=5,
         model_function=lib.model.create_deepconvlstm_model,
         use_fret_for_training=False,
-        exclude_alex_fret=False,
+        exclude_alex_fret=args["exclude_alex"],
     )
