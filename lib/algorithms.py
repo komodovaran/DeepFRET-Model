@@ -701,7 +701,7 @@ def generate_traces(
     if merge_state_labels:
         # 2, 3, 4, 5 states will all have the same label,
         # considered "dynamic"
-        traces[traces["label"] > 5] = 5
+        traces["label"][traces["label"] > 5] = 5
 
     if return_matrix:
         return traces, matrices
