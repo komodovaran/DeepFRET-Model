@@ -113,8 +113,6 @@ def main(
         dataname += "_" + tag
         model_name = model_name.replace("best_model", tag + "_best_model")
 
-    print(dataname)
-    quit()
     if train:
         callbacks = lib.ml.generate_callbacks(
             patience=callback_timeout, outdir=outdir, name=dataname
