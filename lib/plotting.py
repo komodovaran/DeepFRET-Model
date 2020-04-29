@@ -261,7 +261,7 @@ def plot_confusion_matrices(
         plt.tight_layout()
         if outdir is not None:
             plt.savefig(
-                os.path.join(outdir, name + "_binary_confusion_matrix.pdf")
+                os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf")
             )
             plt.close()
     else:
@@ -279,7 +279,7 @@ def plot_confusion_matrices(
         ax.set_xticklabels(l, rotation=90)
         plt.tight_layout()
         if outdir is not None:
-            plt.savefig(os.path.join(outdir, name + "_confusion_matrix.pdf"))
+            plt.savefig(os.path.join(str(outdir), name + "_confusion_matrix.pdf"))
             plt.close()
 
         if (
@@ -306,7 +306,7 @@ def plot_confusion_matrices(
             plt.tight_layout()
             if outdir is not None:
                 plt.savefig(
-                    os.path.join(outdir, name + "_binary_confusion_matrix.pdf")
+                    os.path.join(str(outdir), name + "_binary_confusion_matrix.pdf")
                 )
                 plt.close()
 

@@ -19,13 +19,13 @@ import lib.ml
 import lib.utils
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-n", "--name", help="Name of model output", required=True)
+parser.add_argument("-n", "--name", help="Name of model output", required=True, type = str)
 parser.add_argument(
     "-e",
     "--exclude-alex",
     help="Whether to exclude ALEX from training data",
-    required=False,
-    default=False,
+    required=True,
+    type = lib.utils.str2bool
 )
 args = vars(parser.parse_args())
 
