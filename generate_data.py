@@ -8,6 +8,7 @@ import lib.utils
 import lib.plotting
 import matplotlib.pyplot as plt
 from time import time
+import os.path
 
 
 def main(
@@ -41,8 +42,7 @@ def main(
     print("Generating traces...")
     start = time()
     X = lib.algorithms.generate_traces(
-        n_traces=int(n_traces),
-        merge_state_labels=merge_state_labels,
+        n_traces=int(n_traces), merge_state_labels=merge_state_labels,
     )
     stop = time()
     print("spent {:.2f} s to generate".format((stop - start)))
@@ -80,6 +80,7 @@ def main(
         print("After balance:  ", set(labels.ravel()))
 
     lib.plotting.plot_trace_label_distribution(X=X, y=labels)
+    plt.savefig(os.path.join(outdir, "trace_labe_dist.pdf"))
 
     if np.any(np.isnan(X)):
         raise ValueError
