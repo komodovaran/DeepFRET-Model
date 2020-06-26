@@ -1,6 +1,26 @@
 import os
+import random
+import sys
+
 import numpy as np
 import itertools
+import argparse
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def min_none(ls):
+    """Returns minimum value of list, and None if all elements are None"""
+    v = [x for x in ls if x is not None]
+    return np.min(v) if v else None
 
 
 def random_seed_mp(verbose=False):
@@ -57,7 +77,7 @@ def count_adjacent_values(arr):
 def load_npz_data(path, set_names=("X", "y"), top_percentage=100):
     """Loads .npy formatted simulated data"""
     sets = [
-        np.load(os.path.join(path, file + ".npz"))["arr_0"]
+        np.load(os.path.join(str(path), file + ".npz"))["arr_0"]
         for file in set_names
     ]
     fraction = int(1 / (top_percentage * 0.01))
@@ -73,3 +93,28 @@ def swap_integers(arr, x, y):
     a, b = (arr == x), (arr == y)
     arr[a], arr[b] = y, x
     return arr
+
+
+def generate_name(length=10, module=None):
+    """
+    Generates a random ID for a module
+    """
+    if module is None:
+        module = sys.modules[__name__]
+    while True:
+        name = "id{:0{length}d}".format(
+            random.randint(0, 10 ** length - 1), length=length
+        )
+        if not hasattr(module, name):
+            return name
+
+
+def global_function(func):
+    """
+    Decorate a local function to make it global, thus enabling
+    multiprocessing pickling of it
+    """
+    module = sys.modules[func.__module__]
+    func.__name__ = func.__qualname__ = generate_name(module=module)
+    setattr(module, func.__name__, func)
+    return func

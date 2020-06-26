@@ -9,6 +9,13 @@ from send2trash import send2trash
 from tensorflow import keras
 
 
+def smoothe_one_hot_labels(y, amount):
+    """
+    Smoothes labels towards 0.5 for all classes.
+    """
+    return y * (1 - amount) + 0.5 * amount
+
+
 def labels_to_binary(y, one_hot, to_ones):
     """Converts group labels to binary labels, given desired targets"""
     if one_hot:
@@ -20,19 +27,11 @@ def labels_to_binary(y, one_hot, to_ones):
 
 
 def preprocess_2d_timeseries_seq2seq(
-    X, y, n_timesteps, scaler=None, post_f=None
+    X, y, n_timesteps,
 ):
     """Preprocess X and y for seq2seq learning"""
     X = X.reshape(-1, n_timesteps, X.shape[1])
-
-    if scaler is not None:
-        X = np.array([scaler(xi) for xi in X])
-
-    if post_f is not None:
-        X = np.array([post_f(xi) for xi in X])
-
     y = y.reshape(-1, n_timesteps, 1)
-
     return X, y
 
 
@@ -49,11 +48,11 @@ def gpu_model_to_cpu(trained_gpu_model, untrained_cpu_model, outdir, modelname):
     Loads a keras GPU model and saves it as a CPU-compatible model.
     The models must be exactly alike.
     """
-    weights = os.path.join(outdir, "weights_temp.h5")
+    weights = os.path.join(str(outdir), "weights_temp.h5")
     trained_gpu_model.save_weights(weights)
     untrained_cpu_model.load_weights(weights)
     keras.models.save_model(
-        untrained_cpu_model, os.path.join(outdir, modelname)
+        untrained_cpu_model, os.path.join(str(outdir), modelname)
     )
     try:
         send2trash(weights)
@@ -90,10 +89,10 @@ def balance_classes(X, y, frame=0, exclude_label_from_limiting=0, shuffle=True):
     balanced_X = []
     balanced_y = []
     for n in range(len(X)):
-        xi = X[n, :, :]
         yi = y[n, :, :]
         li = np.int(yi[frame])
         if scores[li] < limiting:
+            xi = X[n, :, :]
             balanced_X.append(xi)
             balanced_y.append(yi)
             scores[li] += 1
@@ -112,17 +111,17 @@ def generate_callbacks(
     )
 
     log = keras.callbacks.CSVLogger(
-        filename=os.path.join(outdir, name + "_training.log"), append=False
+        filename=os.path.join(str(outdir), name + "_training.log"), append=False
     )
     early_stopping = keras.callbacks.EarlyStopping(
         patience=patience, monitor=monitor, verbose=verbose, mode=mode
     )
 
     model_checkpoint = keras.callbacks.ModelCheckpoint(
-        os.path.join(outdir, name + "_best_model.h5"), **checkpoint_params
+        os.path.join(str(outdir), name + "_best_model.h5"), **checkpoint_params
     )
     weight_checkpoint = keras.callbacks.ModelCheckpoint(
-        os.path.join(outdir, name + "_best_model_weights.h5"),
+        os.path.join(str(outdir), name + "_best_model_weights.h5"),
         save_weights_only=True,
         **checkpoint_params
     )
@@ -136,29 +135,29 @@ def generate_callbacks(
         min_lr=0,
     )
     return [
-            log,
-            early_stopping,
-            model_checkpoint,
-            weight_checkpoint,
-            reduce_lr,
-        ]
+        log,
+        early_stopping,
+        model_checkpoint,
+        weight_checkpoint,
+        reduce_lr,
+    ]
 
 
-def seq_probabilities(yi, skip_threshold=0.5, skip_column=0):
+def seq_probabilities(yi, target_values, bleach_skip_threshold=0.5, skip_column=0):
     """
     Calculates class-wise probabilities over the entire trace for a one-hot encoded
     sequence prediction. Skips values where the first value is above threshold (bleaching)
     """
     assert len(yi.shape) == 2
 
-    p = yi[yi[:, skip_column] < skip_threshold]  # Discard rows above threshold
+    p = yi[yi[:, skip_column] < bleach_skip_threshold]  # Discard rows above threshold
     if len(p) > 0:
         p = p.sum(axis=0) / len(p)  # Sum rows for each class
         p = p / p.sum()  # Normalize probabilities to 1
         # p[skip_column] = 0
     else:
         p = np.zeros(yi.shape[1])
-    confidence = p[[2, 3]].sum()
+    confidence = p[target_values].sum()
     return p, confidence
 
 
